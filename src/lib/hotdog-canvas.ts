@@ -26,24 +26,28 @@ export type Stroke = { sauce: string; pts: [number, number, number][] }; // x,y,
 export type Grain = { x: number; y: number; r: number; a: number; rot: number };
 export type SugarBatch = { grains: Grain[]; t: number };
 
-const BODY = { x0: 170, x1: 1230, cy: 400, r: 165 };
+// Hotdog: plump oval, slightly tilted, stick pointing right.
+const BODY = { cx: 720, cy: 410, rx: 560, ry: 150, tilt: -0.06 };
+const tp = (x: number, y: number): [number, number] => {
+  const c = Math.cos(BODY.tilt), s = Math.sin(BODY.tilt);
+  return [BODY.cx + x * c - y * s, BODY.cy + x * s + y * c];
+};
 
 export function bodyPath() {
   const p = new Path2D();
-  const { x0, x1, cy, r } = BODY;
-  // corn-dog style rounded, slightly bumpy capsule
-  p.moveTo(x0 + r, cy - r);
-  const n = 14;
+  const n = 160;
   for (let i = 0; i <= n; i++) {
-    const x = x0 + r + ((x1 - x0 - 2 * r) * i) / n;
-    p.lineTo(x, cy - r + Math.sin(i * 1.7) * 5);
+    const t = (i / n) * Math.PI * 2;
+    const ct = Math.cos(t), st = Math.sin(t);
+    // superellipse (fat capsule) + small crumb bumps
+    const e = 0.55;
+    const x = Math.sign(ct) * Math.pow(Math.abs(ct), e) * BODY.rx;
+    const taper = 1 - 0.06 * Math.max(0, -ct); // left end slightly narrower
+    const bump = 1 + Math.sin(i * 2.9) * 0.008 + Math.sin(i * 7.3) * 0.006;
+    const y = Math.sign(st) * Math.pow(Math.abs(st), 0.8) * BODY.ry * taper;
+    const [px, py] = tp(x * bump, y * bump);
+    i ? p.lineTo(px, py) : p.moveTo(px, py);
   }
-  p.arc(x1 - r, cy, r, -Math.PI / 2, Math.PI / 2);
-  for (let i = n; i >= 0; i--) {
-    const x = x0 + r + ((x1 - x0 - 2 * r) * i) / n;
-    p.lineTo(x, cy + r + Math.sin(i * 2.3) * 5);
-  }
-  p.arc(x0 + r, cy, r, Math.PI / 2, (3 * Math.PI) / 2);
   p.closePath();
   return p;
 }
@@ -60,98 +64,142 @@ export function makeGrains(count: number, rand: () => number = Math.random): Gra
   const c = document.createElement("canvas").getContext("2d")!;
   const out: Grain[] = [];
   while (out.length < count) {
-    const x = BODY.x0 + rand() * (BODY.x1 - BODY.x0);
-    const y = BODY.cy - BODY.r + rand() * BODY.r * 2;
+    const x = BODY.cx - BODY.rx - 10 + rand() * (BODY.rx * 2 + 20);
+    const y = BODY.cy - BODY.ry - 50 + rand() * (BODY.ry * 2 + 100);
     if (!c.isPointInPath(path, x, y)) continue;
-    out.push({ x, y, r: 2 + rand() * 3.2, a: 0.7 + rand() * 0.3, rot: rand() * Math.PI });
+    out.push({ x, y, r: 2 + rand() * 3.4, a: 0.65 + rand() * 0.35, rot: rand() * Math.PI });
   }
   return out;
 }
 
 export function initialSugar(): SugarBatch {
-  return { grains: makeGrains(650, rng(42)), t: 0 };
+  return { grains: makeGrains(900, rng(42)), t: 0 };
+}
+
+function boardPath() {
+  // paddle board: wide rounded body on the left, handle on the right, slight tilt
+  const p = new Path2D();
+  const c = Math.cos(-0.035), s = Math.sin(-0.035);
+  const T = (x: number, y: number): [number, number] => [800 + (x - 800) * c - (y - 420) * s, 420 + (x - 800) * s + (y - 420) * c];
+  const pts: [number, number][] = [];
+  const add = (x: number, y: number) => pts.push(T(x, y));
+  const R = 70;
+  // body corners
+  const bx0 = 70, bx1 = 1360, by0 = 150, by1 = 700;
+  const arc = (cx: number, cy: number, a0: number, a1: number) => {
+    for (let i = 0; i <= 10; i++) { const a = a0 + ((a1 - a0) * i) / 10; add(cx + Math.cos(a) * R, cy + Math.sin(a) * R); }
+  };
+  arc(bx0 + R, by0 + R, Math.PI, Math.PI * 1.5);
+  add(bx1 - 40, by0);
+  // shoulder into handle
+  add(bx1, by0 + 60); add(bx1 + 30, 340);
+  add(1560, 335); add(1590, 360); add(1590, 470); add(1560, 495);
+  add(bx1 + 30, 490); add(bx1, by1 - 70);
+  add(bx1 - 40, by1);
+  arc(bx0 + R, by1 - R, Math.PI * 0.5, Math.PI);
+  pts.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
+  p.closePath();
+  return { p, T };
 }
 
 export function drawBoard(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = "#f6ecd8";
   ctx.fillRect(0, 0, W, H);
-  // board
-  const bx = 40, by = 90, bw = 1520, bh = 620, br = 60;
+  const { p, T } = boardPath();
+  // thickness / shadow
   ctx.save();
-  ctx.fillStyle = "rgba(120,80,40,0.12)";
-  roundRect(ctx, bx + 6, by + 14, bw, bh, br);
-  ctx.fill();
-  roundRect(ctx, bx, by, bw, bh, br);
-  ctx.fillStyle = "#d8a873";
-  ctx.fill();
-  ctx.clip();
+  ctx.translate(8, 18);
+  ctx.fillStyle = "rgba(120,80,40,0.14)";
+  ctx.fill(p);
+  ctx.translate(-4, -8);
+  ctx.fillStyle = "#b07a45";
+  ctx.fill(p);
+  ctx.restore();
+  ctx.save();
+  ctx.fillStyle = "#dcae78";
+  ctx.fill(p);
+  ctx.clip(p);
   const r = rng(7);
   ctx.lineCap = "round";
-  for (let i = 0; i < 34; i++) {
-    const y = by + 10 + i * 18 + r() * 8;
-    ctx.strokeStyle = `rgba(150,95,50,${0.08 + r() * 0.1})`;
-    ctx.lineWidth = 1.5 + r() * 2.5;
+  for (let i = 0; i < 40; i++) {
+    const y = 130 + i * 15 + r() * 8;
+    ctx.strokeStyle = `rgba(150,95,50,${0.06 + r() * 0.1})`;
+    ctx.lineWidth = 1.2 + r() * 2.2;
     ctx.beginPath();
-    ctx.moveTo(bx, y);
-    for (let x = bx; x <= bx + bw; x += 80) ctx.lineTo(x, y + Math.sin(x / 140 + i) * 4);
+    for (let x = 40; x <= 1620; x += 60) {
+      const [px, py] = T(x, y + Math.sin(x / 170 + i * 0.7) * 5);
+      x === 40 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
     ctx.stroke();
   }
-  ctx.strokeStyle = "rgba(150,95,50,0.18)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.ellipse(1380, 230, 22, 9, 0, 0, Math.PI * 2);
-  ctx.stroke();
   ctx.restore();
   ctx.strokeStyle = "#b9844f";
-  ctx.lineWidth = 5;
-  roundRect(ctx, bx, by, bw, bh, br);
-  ctx.stroke();
-  // hanging hole
-  ctx.fillStyle = "#f6ecd8";
-  ctx.beginPath();
-  ctx.arc(bx + bw - 60, by + 60, 16, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.stroke(p);
 }
 
 export function drawHotdog(ctx: CanvasRenderingContext2D) {
-  const { x1, cy } = BODY;
-  // shadow
-  ctx.fillStyle = "rgba(90,50,20,0.18)";
+  // soft shadow
+  ctx.save();
+  ctx.filter = "blur(14px)";
+  ctx.fillStyle = "rgba(90,45,15,0.32)";
+  const [sx, sy] = tp(20, BODY.ry + 10);
   ctx.beginPath();
-  ctx.ellipse(800, cy + 185, 640, 34, 0, 0, Math.PI * 2);
+  ctx.ellipse(sx, sy, BODY.rx * 0.95, 30, BODY.tilt, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
   // stick
-  ctx.fillStyle = "#ead2a3";
-  ctx.strokeStyle = "#b8925a";
-  ctx.lineWidth = 4;
-  roundRect(ctx, x1 - 60, cy - 22, 380, 44, 22);
-  ctx.fill();
-  ctx.stroke();
+  const [a0x, a0y] = tp(BODY.rx - 80, 0);
+  const [a1x, a1y] = tp(BODY.rx + 250, 0);
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#a9814f";
+  ctx.lineWidth = 34;
+  ctx.beginPath(); ctx.moveTo(a0x, a0y); ctx.lineTo(a1x, a1y); ctx.stroke();
+  ctx.strokeStyle = "#ecd3a2";
+  ctx.lineWidth = 28;
+  ctx.beginPath(); ctx.moveTo(a0x, a0y); ctx.lineTo(a1x, a1y); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,245,220,0.8)";
+  ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(a0x, a0y - 7); ctx.lineTo(a1x - 6, a1y - 7); ctx.stroke();
   // body
   const p = bodyPath();
   ctx.save();
-  ctx.fillStyle = "#e3a043";
+  ctx.fillStyle = "#e08a2c";
   ctx.fill(p);
   ctx.clip(p);
-  const g = ctx.createLinearGradient(0, cy - 165, 0, cy + 165);
-  g.addColorStop(0, "rgba(255,225,140,0.7)");
-  g.addColorStop(0.45, "rgba(255,200,100,0)");
-  g.addColorStop(1, "rgba(150,70,20,0.35)");
+  ctx.save();
+  ctx.translate(BODY.cx, BODY.cy);
+  ctx.rotate(BODY.tilt);
+  const g = ctx.createLinearGradient(0, -BODY.ry, 0, BODY.ry);
+  g.addColorStop(0, "rgba(255,205,110,0.9)");
+  g.addColorStop(0.4, "rgba(245,170,70,0.2)");
+  g.addColorStop(1, "rgba(140,60,10,0.55)");
   ctx.fillStyle = g;
-  ctx.fill(p);
-  // crumb texture
+  ctx.fillRect(-BODY.rx - 20, -BODY.ry - 20, BODY.rx * 2 + 40, BODY.ry * 2 + 40);
+  const rg = ctx.createRadialGradient(-BODY.rx * 0.2, -BODY.ry * 0.35, 10, 0, 0, BODY.rx);
+  rg.addColorStop(0, "rgba(255,225,150,0.45)");
+  rg.addColorStop(1, "rgba(255,225,150,0)");
+  ctx.fillStyle = rg;
+  ctx.fillRect(-BODY.rx - 20, -BODY.ry - 20, BODY.rx * 2 + 40, BODY.ry * 2 + 40);
+  ctx.restore();
+  // crumb (panko) texture
   const r = rng(99);
-  for (let i = 0; i < 900; i++) {
-    const x = 170 + r() * 1060, y = cy - 165 + r() * 330;
-    ctx.fillStyle = r() > 0.5 ? "rgba(170,90,25,0.25)" : "rgba(255,215,130,0.35)";
+  for (let i = 0; i < 2600; i++) {
+    const x = BODY.cx - BODY.rx + r() * BODY.rx * 2;
+    const y = BODY.cy - BODY.ry - 40 + r() * (BODY.ry * 2 + 80);
+    const k = r();
+    ctx.fillStyle = k > 0.55 ? "rgba(160,75,15,0.28)" : k > 0.2 ? "rgba(255,200,110,0.4)" : "rgba(120,50,10,0.3)";
     ctx.beginPath();
-    ctx.arc(x, y, 2 + r() * 5, 0, Math.PI * 2);
+    ctx.ellipse(x, y, 1.5 + r() * 4.5, 1 + r() * 3, r() * 3, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
-  ctx.strokeStyle = "#9c5a1c";
-  ctx.lineWidth = 5;
+  // crumbly rim
+  ctx.strokeStyle = "rgba(170,85,20,0.75)";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([6, 3, 2, 4]);
   ctx.stroke(p);
+  ctx.setLineDash([]);
 }
 
 export function drawSugar(ctx: CanvasRenderingContext2D, batches: SugarBatch[], now: number) {
