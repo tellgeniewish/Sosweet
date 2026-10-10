@@ -181,7 +181,7 @@ export function drawSugar(ctx: CanvasRenderingContext2D, batches: SugarBatch[], 
 }
 
 export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke) {
-  const sauce = SAUCES.find((x) => x.id === s.sauce) ?? SAUCES[0];
+  const sauce = (SAUCES.find((x) => x.id === s.sauce) ?? SAUCES[0])!;
   const pts = s.pts;
   if (!pts.length) return;
   const pass = (color: string, wMul: number, dx: number, dy: number, alpha = 1) => {
@@ -192,12 +192,12 @@ export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke) {
     ctx.lineJoin = "round";
     if (pts.length === 1) {
       ctx.beginPath();
-      ctx.arc(pts[0][0] + dx, pts[0][1] + dy, (sauce.width * wMul) / 2, 0, Math.PI * 2);
+      ctx.arc(pts[0]![0] + dx, pts[0]![1] + dy, (sauce.width * wMul) / 2, 0, Math.PI * 2);
       ctx.fill();
       return;
     }
     for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1], b = pts[i];
+      const a = pts[i - 1]!, b = pts[i]!;
       ctx.lineWidth = sauce.width * wMul * b[2];
       ctx.beginPath();
       ctx.moveTo(a[0] + dx, a[1] + dy);

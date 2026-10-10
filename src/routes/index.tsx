@@ -37,7 +37,7 @@ function Index() {
   const sugarRef = useRef<SugarBatch[]>([]);
   const pathRef = useRef<Path2D | null>(null);
   const rafRef = useRef(0);
-  const [sauce, setSauce] = useState(SAUCES[0].id);
+  const [sauce, setSauce] = useState(SAUCES[0]!.id);
   const [strokeCount, setStrokeCount] = useState(0);
   const [sugarLevel, setSugarLevel] = useState(0);
   const [preview, setPreview] = useState<string | null>(null);
@@ -104,7 +104,7 @@ function Index() {
     for (const ev of events) {
       const x = ((ev.clientX - r.left) / r.width) * W;
       const y = ((ev.clientY - r.top) / r.height) * H;
-      const last = cur.pts[cur.pts.length - 1];
+      const last = cur.pts[cur.pts.length - 1]!;
       const d = Math.hypot(x - last[0], y - last[1]);
       if (d < 2) continue;
       // interpolate so fast moves stay continuous
@@ -112,7 +112,7 @@ function Index() {
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         const wf = 1 + (Math.random() - 0.5) * s.wobble;
-        const prev = cur.pts[cur.pts.length - 1][2];
+        const prev = cur.pts[cur.pts.length - 1]![2];
         cur.pts.push([last[0] + (x - last[0]) * t, last[1] + (y - last[1]) * t, prev * 0.7 + wf * 0.3]);
       }
     }
