@@ -259,13 +259,3 @@ export function drawStroke(ctx: CanvasRenderingContext2D, s: Stroke) {
   pass(sauce.light, 0.32, -sauce.width * 0.18, -sauce.width * 0.2, 0.75); // gloss
   ctx.globalAlpha = 1;
 }
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
