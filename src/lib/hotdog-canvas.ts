@@ -164,15 +164,15 @@ export function drawHotdog(ctx: CanvasRenderingContext2D) {
   // body
   const p = bodyPath();
   ctx.save();
-  ctx.fillStyle = "#e08a2c";
+  ctx.fillStyle = "#d4741a";
   ctx.fill(p);
   ctx.clip(p);
   ctx.save();
   ctx.translate(BODY.cx, BODY.cy);
   ctx.rotate(BODY.tilt);
   const g = ctx.createLinearGradient(0, -BODY.ry, 0, BODY.ry);
-  g.addColorStop(0, "rgba(255,205,110,0.9)");
-  g.addColorStop(0.4, "rgba(245,170,70,0.2)");
+  g.addColorStop(0, "rgba(250,180,80,0.75)");
+  g.addColorStop(0.4, "rgba(230,140,40,0.1)");
   g.addColorStop(1, "rgba(140,60,10,0.55)");
   ctx.fillStyle = g;
   ctx.fillRect(-BODY.rx - 20, -BODY.ry - 20, BODY.rx * 2 + 40, BODY.ry * 2 + 40);
