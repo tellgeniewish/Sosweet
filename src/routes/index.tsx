@@ -6,7 +6,6 @@ import {
   SUGAR_POT,
   W,
   boardPath,
-  bodyPath,
   drawBoard,
   drawHotdog,
   drawStroke,
