@@ -3,12 +3,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   H,
   SAUCES,
+  SUGAR_POT,
   W,
+  boardPath,
   bodyPath,
   drawBoard,
   drawHotdog,
   drawStroke,
   drawSugar,
+  drawSugarPot,
   initialSugar,
   makeGrains,
   type Stroke,
@@ -35,8 +38,9 @@ function Index() {
   const strokesRef = useRef<Stroke[]>([]);
   const curRef = useRef<Stroke | null>(null);
   const sugarRef = useRef<SugarBatch[]>([]);
-  const pathRef = useRef<Path2D | null>(null);
+  const boardRef = useRef<Path2D | null>(null);
   const rafRef = useRef(0);
+  const potAnimRef = useRef(0); // timestamp of last pot click, 0 = idle
   const [sauce, setSauce] = useState(SAUCES[0]!.id);
   const [strokeCount, setStrokeCount] = useState(0);
   const [sugarLevel, setSugarLevel] = useState(0);
@@ -48,13 +52,19 @@ function Index() {
     const ctx = cv.getContext("2d")!;
     const now = performance.now();
     ctx.drawImage(baseRef.current, 0, 0);
+    // sugar pot tilt animation (400ms)
+    const potT = potAnimRef.current ? Math.min(1, (now - potAnimRef.current) / 400) : 0;
+    const tiltK = potT > 0 ? Math.sin(potT * Math.PI) : 0;
+    if (potT >= 1) potAnimRef.current = 0;
+    drawSugarPot(ctx, tiltK);
     drawSugar(ctx, sugarRef.current, now);
     ctx.save();
-    ctx.clip(pathRef.current!);
+    ctx.clip(boardRef.current!);
     for (const s of strokesRef.current) drawStroke(ctx, s);
     if (curRef.current) drawStroke(ctx, curRef.current);
     ctx.restore();
-    const animating = sugarRef.current.some((b) => b.t && now - b.t < 450);
+    const animating =
+      sugarRef.current.some((b) => b.t && now - b.t < 450) || potT > 0;
     if (animating) rafRef.current = requestAnimationFrame(render);
   }, []);
 
@@ -71,12 +81,11 @@ function Index() {
     drawBoard(b);
     drawHotdog(b);
     baseRef.current = base;
-    pathRef.current = bodyPath();
+    boardRef.current = boardPath().p;
     sugarRef.current = [initialSugar()];
     const cv = canvasRef.current!;
     cv.width = W;
     cv.height = H;
-    // Fonts may load later — nothing on canvas depends on them.
     render();
     return () => cancelAnimationFrame(rafRef.current);
   }, [render]);
@@ -85,12 +94,25 @@ function Index() {
     const r = canvasRef.current!.getBoundingClientRect();
     return [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H];
   };
-  const inside = (x: number, y: number) =>
-    canvasRef.current!.getContext("2d")!.isPointInPath(pathRef.current!, x, y);
+  const insideBoard = (x: number, y: number) =>
+    canvasRef.current!.getContext("2d")!.isPointInPath(boardRef.current!, x, y);
+  const insidePot = (x: number, y: number) =>
+    Math.hypot(x - SUGAR_POT.x, y - SUGAR_POT.y) < SUGAR_POT.r;
+
+  const addSugar = useCallback(() => {
+    sugarRef.current.push({ grains: makeGrains(450), t: performance.now() });
+    setSugarLevel(sugarRef.current.length - 1);
+    potAnimRef.current = performance.now();
+    schedule();
+  }, [schedule]);
 
   const onDown = (e: React.PointerEvent) => {
     const [x, y] = toLogical(e);
-    if (!inside(x, y)) return;
+    if (insidePot(x, y)) {
+      addSugar();
+      return;
+    }
+    if (!insideBoard(x, y)) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     curRef.current = { sauce, pts: [[x, y, 1]] };
     schedule();
@@ -136,11 +158,6 @@ function Index() {
     setStrokeCount(0);
     schedule();
   };
-  const addSugar = () => {
-    sugarRef.current.push({ grains: makeGrains(450), t: performance.now() });
-    setSugarLevel(sugarRef.current.length - 1);
-    schedule();
-  };
   const undoSugar = () => {
     if (sugarRef.current.length > 1) sugarRef.current.pop();
     setSugarLevel(sugarRef.current.length - 1);
@@ -153,38 +170,22 @@ function Index() {
   };
   const finish = () => {
     sugarRef.current.forEach((b) => (b.t = 0));
+    potAnimRef.current = 0;
     render();
     setPreview(canvasRef.current!.toDataURL("image/png"));
   };
 
-  const SugarControls = (
-    <div className="flex shrink-0 flex-col gap-2 rounded-2xl bg-card p-3">
-      <button className="btn btn-primary" onClick={addSugar} aria-label="설탕 뿌리기">
-        <SugarIcon /> 설탕 뿌리기
-      </button>
-      <div className="flex gap-2">
-        <button className="btn flex-1 px-3 text-sm" onClick={undoSugar} disabled={!sugarLevel}>
-          설탕 되돌리기
-        </button>
-        <button className="btn px-3 text-sm" onClick={resetSugar} disabled={!sugarLevel} aria-label="설탕 초기화">
-          처음으로
-        </button>
-      </div>
-      <p className="text-center text-xs text-muted-foreground">추가한 설탕 {sugarLevel}번</p>
-    </div>
-  );
-
   return (
-    <main className="min-h-screen overflow-x-hidden bg-background px-4 py-6 text-foreground md:py-10">
-      <header className="mx-auto max-w-3xl text-center">
-        <h1 className="font-display text-4xl text-primary md:text-5xl">소스윗 (Sosweet)</h1>
-        <p className="mt-2 font-display text-lg md:text-xl">소스로 쓰는 달콤한 한마디</p>
-        <p className="mt-1 text-sm text-muted-foreground">
+    <main className="min-h-screen overflow-x-hidden bg-background px-4 py-6 text-foreground md:py-8">
+      <header className="mx-auto max-w-2xl text-center">
+        <h1 className="font-display text-3xl text-primary md:text-4xl">소스윗 (Sosweet)</h1>
+        <p className="mt-1.5 font-display text-base md:text-lg">소스로 쓰는 달콤한 한마디</p>
+        <p className="mt-1 text-xs text-muted-foreground md:text-sm">
           마음은 말로 하기 쑥스러우니까, 핫도그에 써볼까?
         </p>
       </header>
 
-      <div className="mx-auto mt-6 grid max-w-[1500px] gap-5 lg:grid-cols-[220px_minmax(0,1fr)_220px] lg:items-center">
+      <div className="mx-auto mt-5 grid max-w-[1500px] gap-4 lg:grid-cols-[200px_minmax(0,1fr)_200px] lg:items-center">
         <aside className="order-2 flex min-w-0 flex-col gap-3 lg:order-1">
           <div
             role="radiogroup"
@@ -200,25 +201,35 @@ function Index() {
                 onClick={() => setSauce(s.id)}
                 className="chip shrink-0"
               >
-                <SauceBottle color={s.color} dark={s.dark} />
+                <SauceSwatch color={s.color} dark={s.dark} light={s.light} />
                 <span className="whitespace-nowrap">{s.name}</span>
               </button>
             ))}
           </div>
-          {SugarControls}
+          <div className="flex gap-2 lg:flex-col">
+            <button className="btn flex-1 px-3 text-sm" onClick={undoSugar} disabled={!sugarLevel}>
+              설탕 되돌리기
+            </button>
+            <button className="btn flex-1 px-3 text-sm" onClick={resetSugar} disabled={!sugarLevel} aria-label="설탕 초기화">
+              설탕 처음으로
+            </button>
+          </div>
+          <p className="text-center text-xs text-muted-foreground lg:text-left">
+            도마 위 설탕 통을 눌러 설탕을 뿌려보세요. (추가 {sugarLevel}번)
+          </p>
         </aside>
 
         <section className="order-1 min-w-0 lg:order-2">
           <canvas
             ref={canvasRef}
-            aria-label="핫도그 드로잉 영역. 핫도그 위를 드래그해서 소스로 글씨를 써보세요."
+            aria-label="핫도그 드로잉 영역. 핫도그나 도마 위를 드래그해서 소스로 글씨를 써보세요."
             className="mx-auto block aspect-[2/1] w-full max-w-[1100px] cursor-crosshair touch-none select-none rounded-3xl"
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
             onPointerCancel={onUp}
           />
-          <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
             <button className="btn" onClick={undo} disabled={!strokeCount}>
               ↶ 실행 취소
             </button>
@@ -259,23 +270,34 @@ function Index() {
   );
 }
 
-function SauceBottle({ color, dark }: { color: string; dark: string }) {
+// Small drizzle swatch: a glossy sauce drop with a trailing squiggle.
+function SauceSwatch({ color, dark, light }: { color: string; dark: string; light: string }) {
   return (
-    <svg width="28" height="36" viewBox="0 0 28 36" aria-hidden>
-      <path d="M12 1h4l1 6h-6z" fill={dark} />
-      <rect x="5" y="7" width="18" height="27" rx="7" fill={color} stroke={dark} strokeWidth="2" />
-      <rect x="9" y="12" width="3" height="12" rx="1.5" fill="currentColor" opacity=".18" />
-    </svg>
-  );
-}
-
-function SugarIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M7 9h10l-1 12H8z" />
-      <path d="M8 9V6a4 4 0 0 1 8 0v3" />
-      <circle cx="10" cy="3" r=".6" fill="currentColor" />
-      <circle cx="14" cy="2" r=".6" fill="currentColor" />
+    <svg width="34" height="30" viewBox="0 0 34 30" aria-hidden>
+      <path
+        d="M4 22 C8 14, 12 26, 17 18 S26 8, 30 14"
+        fill="none"
+        stroke={dark}
+        strokeWidth="6.4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M4 22 C8 14, 12 26, 17 18 S26 8, 30 14"
+        fill="none"
+        stroke={color}
+        strokeWidth="4.6"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6 20.5 C9 15, 12 24, 16.5 17.5"
+        fill="none"
+        stroke={light}
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        opacity="0.85"
+      />
+      <circle cx="29.4" cy="13" r="3.4" fill={color} stroke={dark} strokeWidth="1.2" />
+      <circle cx="28.3" cy="11.8" r="1" fill={light} />
     </svg>
   );
 }
