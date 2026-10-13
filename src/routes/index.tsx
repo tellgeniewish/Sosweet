@@ -42,6 +42,17 @@ function Index() {
   const rafRef = useRef(0);
   const potAnimRef = useRef(0); // timestamp of last pot click, 0 = idle
   const hoverRef = useRef(false);
+  const inkRef = useRef<HTMLCanvasElement | null>(null);
+  const rebuildInk = useCallback(() => {
+    const ink = inkRef.current;
+    if (!ink) return;
+    const c = ink.getContext("2d")!;
+    c.clearRect(0, 0, W, H);
+    c.save();
+    c.clip(boardRef.current!);
+    drawStrokes(c, strokesRef.current);
+    c.restore();
+  }, []);
   const [sauce, setSauce] = useState(SAUCES[0]!.id);
   const [strokeCount, setStrokeCount] = useState(0);
   const [sugarLevel, setSugarLevel] = useState(0);
@@ -61,7 +72,8 @@ function Index() {
     drawSugar(ctx, sugarRef.current, now);
     ctx.save();
     ctx.clip(boardRef.current!);
-    drawStrokes(ctx, curRef.current ? [...strokesRef.current, curRef.current] : strokesRef.current);
+    if (inkRef.current) ctx.drawImage(inkRef.current, 0, 0);
+    if (curRef.current) drawStrokes(ctx, [curRef.current]);
     ctx.restore();
     const animating =
       sugarRef.current.some((b) => b.t && now - b.t < 450) || potT > 0;
@@ -81,6 +93,10 @@ function Index() {
     drawBoard(b);
     drawHotdog(b);
     baseRef.current = base;
+    const ink = document.createElement("canvas");
+    ink.width = W;
+    ink.height = H;
+    inkRef.current = ink;
     boardRef.current = boardPath().p;
     sugarRef.current = [initialSugar()];
     const cv = canvasRef.current!;
@@ -151,17 +167,20 @@ function Index() {
     if (!curRef.current) return;
     strokesRef.current.push(curRef.current);
     curRef.current = null;
+    rebuildInk();
     setStrokeCount(strokesRef.current.length);
     schedule();
   };
 
   const undo = () => {
     strokesRef.current.pop();
+    rebuildInk();
     setStrokeCount(strokesRef.current.length);
     schedule();
   };
   const clearAll = () => {
     strokesRef.current = [];
+    rebuildInk();
     setStrokeCount(0);
     schedule();
   };
