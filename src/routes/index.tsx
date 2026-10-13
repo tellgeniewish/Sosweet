@@ -123,7 +123,7 @@ function Index() {
     if (!cur) {
       const [hx, hy] = toLogical(e);
       const over = insidePot(hx, hy);
-      e.currentTarget.style.cursor = over ? "pointer" : insideBoard(hx, hy) ? "crosshair" : "default";
+      canvasRef.current!.style.cursor = over ? "pointer" : insideBoard(hx, hy) ? "crosshair" : "default";
       if (over !== hoverRef.current) { hoverRef.current = over; schedule(); }
       return;
     }
