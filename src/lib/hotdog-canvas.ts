@@ -482,17 +482,24 @@ function getScratch(w: number, h: number) {
 // Draw all strokes with seamless translucent layers (shadow, gloss) on an offscreen canvas.
 export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[], scale = 1) {
   if (!strokes.length) return;
-  const w = ctx.canvas.width, h = ctx.canvas.height;
   const prepared = strokes.map((s) => ({ s: (SAUCES.find((x) => x.id === s.sauce) ?? SAUCES[0])!, pts: smooth(s.pts) }));
+  // bounding box (logical) so offscreen layers stay small and fast
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const { s, pts } of prepared) for (const p of pts) {
+    const pad = s.width * 1.6 + 12;
+    x0 = Math.min(x0, p[0] - pad); y0 = Math.min(y0, p[1] - pad);
+    x1 = Math.max(x1, p[0] + pad); y1 = Math.max(y1, p[1] + pad);
+  }
+  const bw = Math.ceil((x1 - x0) * scale), bh = Math.ceil((y1 - y0) * scale);
   const layer = (fn: (c: CanvasRenderingContext2D) => void, alpha: number, blur: number) => {
-    const c = getScratch(w, h);
-    c.setTransform(scale, 0, 0, scale, 0, 0);
+    const c = getScratch(bw, bh);
+    c.setTransform(scale, 0, 0, scale, -x0 * scale, -y0 * scale);
     fn(c);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = alpha;
     if (blur) ctx.filter = `blur(${blur * scale}px)`;
-    ctx.drawImage(scratch!, 0, 0);
+    ctx.drawImage(scratch!, 0, 0, bw, bh, x0 * scale, y0 * scale, bw, bh);
     ctx.restore();
   };
   // 1. contact shadow: soft, close — sauce sits ON the surface
@@ -503,10 +510,10 @@ export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[], sc
   // 2. body: soft rim, then colour (per stroke so order is kept)
   for (const { s, pts } of prepared) {
     ctx.save();
-    ctx.filter = `blur(${0.6 * scale}px)`;
+    ctx.globalAlpha = 0.85;
     ctx.fillStyle = ctx.strokeStyle = s.dark;
     trace(ctx, pts, s.width, s.edge * 0.98, 0, 0.8);
-    ctx.filter = "none";
+    ctx.globalAlpha = 1;
     ctx.fillStyle = ctx.strokeStyle = s.color;
     trace(ctx, pts, s.width, 0.9, 0, 0);
     ctx.restore();
@@ -517,14 +524,15 @@ export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[], sc
       c.fillStyle = c.strokeStyle = s.dark;
       trace(c, pts, s.width, 0.42, 0, s.width * 0.2);
     }
-  }, 0.35, 2.5);
-  // 4. gloss: a thin soft band offset to the upper-left, strength per sauce
-  for (const { s, pts } of prepared) {
-    layer((c) => {
+  }, 0.3, 2.5);
+  // 4. gloss: thin soft band offset to the upper-left; strength per sauce
+  layer((c) => {
+    for (const { s, pts } of prepared) {
+      c.globalAlpha = 0.35 + s.gloss * 0.65;
       c.fillStyle = c.strokeStyle = s.light;
       trace(c, pts, s.width, 0.26, -s.width * 0.13, -s.width * 0.17);
-    }, 0.25 + s.gloss * 0.5, 1.4);
-  }
+    }
+  }, 0.75, 1.4);
   ctx.globalAlpha = 1;
 }
 
