@@ -19,8 +19,8 @@
  */
 
 @theme inline {
-  --font-display: "Jua", sans-serif;
-  --font-sans: "Gowun Dodum", sans-serif;
+  --font-display: "Gowun Batang", serif;
+  --font-sans: "IBM Plex Sans KR", system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -107,18 +107,21 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
+    line-height: 1.6;
   }
 }
 
 @layer components {
   .chip {
-    @apply flex items-center gap-3 rounded-2xl border-2 border-transparent bg-card px-3 py-2 text-left text-sm font-display text-foreground transition-transform active:scale-95;
+    @apply flex items-center gap-3 rounded-xl border border-transparent bg-transparent px-3 py-1.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-card active:scale-[0.98];
   }
   .chip[aria-pressed="true"] {
-    @apply border-primary bg-secondary;
+    @apply border-border bg-card;
   }
   .btn {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border-2 border-border bg-card px-5 font-display text-base text-foreground transition-transform active:scale-95 disabled:opacity-40;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-border bg-card px-5 text-sm font-medium text-foreground transition-transform active:scale-95 disabled:opacity-40;
   }
   .btn-primary {
     @apply border-primary bg-primary text-primary-foreground;
