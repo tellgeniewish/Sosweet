@@ -8,11 +8,12 @@ import {
   boardPath,
   drawBoard,
   drawHotdog,
-  drawStroke,
+  drawStrokes,
+  drawSwatch,
+  makeBatch,
   drawSugar,
   drawSugarPot,
   initialSugar,
-  makeGrains,
   type Stroke,
   type SugarBatch,
 } from "@/lib/hotdog-canvas";
@@ -40,6 +41,7 @@ function Index() {
   const boardRef = useRef<Path2D | null>(null);
   const rafRef = useRef(0);
   const potAnimRef = useRef(0); // timestamp of last pot click, 0 = idle
+  const hoverRef = useRef(false);
   const [sauce, setSauce] = useState(SAUCES[0]!.id);
   const [strokeCount, setStrokeCount] = useState(0);
   const [sugarLevel, setSugarLevel] = useState(0);
@@ -55,12 +57,11 @@ function Index() {
     const potT = potAnimRef.current ? Math.min(1, (now - potAnimRef.current) / 400) : 0;
     const tiltK = potT > 0 ? Math.sin(potT * Math.PI) : 0;
     if (potT >= 1) potAnimRef.current = 0;
-    drawSugarPot(ctx, tiltK);
+    drawSugarPot(ctx, tiltK, hoverRef.current);
     drawSugar(ctx, sugarRef.current, now);
     ctx.save();
     ctx.clip(boardRef.current!);
-    for (const s of strokesRef.current) drawStroke(ctx, s);
-    if (curRef.current) drawStroke(ctx, curRef.current);
+    drawStrokes(ctx, curRef.current ? [...strokesRef.current, curRef.current] : strokesRef.current);
     ctx.restore();
     const animating =
       sugarRef.current.some((b) => b.t && now - b.t < 450) || potT > 0;
@@ -86,6 +87,7 @@ function Index() {
     cv.width = W;
     cv.height = H;
     render();
+    document.fonts?.ready.then(() => render());
     return () => cancelAnimationFrame(rafRef.current);
   }, [render]);
 
@@ -99,7 +101,7 @@ function Index() {
     Math.hypot(x - SUGAR_POT.x, y - SUGAR_POT.y) < SUGAR_POT.r;
 
   const addSugar = useCallback(() => {
-    sugarRef.current.push({ grains: makeGrains(450), t: performance.now() });
+    sugarRef.current.push(makeBatch());
     setSugarLevel(sugarRef.current.length - 1);
     potAnimRef.current = performance.now();
     schedule();
@@ -118,7 +120,13 @@ function Index() {
   };
   const onMove = (e: React.PointerEvent) => {
     const cur = curRef.current;
-    if (!cur) return;
+    if (!cur) {
+      const [hx, hy] = toLogical(e);
+      const over = insidePot(hx, hy);
+      e.currentTarget.style.cursor = over ? "pointer" : insideBoard(hx, hy) ? "crosshair" : "default";
+      if (over !== hoverRef.current) { hoverRef.current = over; schedule(); }
+      return;
+    }
     const events = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent];
     const s = SAUCES.find((x) => x.id === cur.sauce)!;
     const r = canvasRef.current!.getBoundingClientRect();
@@ -132,9 +140,9 @@ function Index() {
       const steps = Math.ceil(d / 6);
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
-        const wf = 1 + (Math.random() - 0.5) * s.wobble;
+        const wf = 1 + (Math.random() - 0.5) * s.wobble * 0.5;
         const prev = cur.pts[cur.pts.length - 1]![2];
-        cur.pts.push([last[0] + (x - last[0]) * t, last[1] + (y - last[1]) * t, prev * 0.7 + wf * 0.3]);
+        cur.pts.push([last[0] + (x - last[0]) * t, last[1] + (y - last[1]) * t, prev * 0.85 + wf * 0.15]);
       }
     }
     schedule();
@@ -177,8 +185,8 @@ function Index() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-background px-4 py-6 text-foreground md:py-8">
       <header className="mx-auto max-w-2xl text-center">
-        <h1 className="font-display text-3xl text-primary md:text-4xl">소스윗 (Sosweet)</h1>
-        <p className="mt-1.5 font-display text-base md:text-lg">소스로 쓰는 달콤한 한마디</p>
+        <h1 className="font-display text-3xl tracking-tight text-primary md:text-[2.5rem]">소스윗 (Sosweet)</h1>
+        <p className="mt-2 text-base font-medium md:text-lg">소스로 쓰는 달콤한 한마디</p>
         <p className="mt-1 text-xs text-muted-foreground md:text-sm">
           마음은 말로 하기 쑥스러우니까, 핫도그에 써볼까?
         </p>
@@ -200,7 +208,7 @@ function Index() {
                 onClick={() => setSauce(s.id)}
                 className="chip shrink-0"
               >
-                <SauceSwatch color={s.color} dark={s.dark} light={s.light} />
+                <SauceSwatch id={s.id} />
                 <span className="whitespace-nowrap">{s.name}</span>
               </button>
             ))}
@@ -214,7 +222,7 @@ function Index() {
             </button>
           </div>
           <p className="text-center text-xs text-muted-foreground lg:text-left">
-            도마 위 설탕 통을 눌러 설탕을 뿌려보세요. (추가 {sugarLevel}번)
+            설탕은 도마 위 ‘설탕’ 통을 눌러 뿌려요. (추가 {sugarLevel}번)
           </p>
         </aside>
 
@@ -252,7 +260,7 @@ function Index() {
           onClick={() => setPreview(null)}
         >
           <div className="w-full max-w-3xl rounded-3xl bg-card p-5" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-center font-display text-2xl">완성! 🌭</h2>
+            <h2 className="text-center font-display text-2xl tracking-tight">완성! 🌭</h2>
             <img src={preview} alt="완성한 핫도그" className="mt-4 w-full rounded-2xl" />
             <div className="mt-4 flex justify-center gap-3">
               <button className="btn" onClick={() => setPreview(null)}>
@@ -269,34 +277,11 @@ function Index() {
   );
 }
 
-// Small drizzle swatch: a glossy sauce drop with a trailing squiggle.
-function SauceSwatch({ color, dark, light }: { color: string; dark: string; light: string }) {
-  return (
-    <svg width="34" height="30" viewBox="0 0 34 30" aria-hidden>
-      <path
-        d="M4 22 C8 14, 12 26, 17 18 S26 8, 30 14"
-        fill="none"
-        stroke={dark}
-        strokeWidth="6.4"
-        strokeLinecap="round"
-      />
-      <path
-        d="M4 22 C8 14, 12 26, 17 18 S26 8, 30 14"
-        fill="none"
-        stroke={color}
-        strokeWidth="4.6"
-        strokeLinecap="round"
-      />
-      <path
-        d="M6 20.5 C9 15, 12 24, 16.5 17.5"
-        fill="none"
-        stroke={light}
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        opacity="0.85"
-      />
-      <circle cx="29.4" cy="13" r="3.4" fill={color} stroke={dark} strokeWidth="1.2" />
-      <circle cx="28.3" cy="11.8" r="1" fill={light} />
-    </svg>
-  );
+// Sauce sample rendered with the same renderer used on the hotdog.
+function SauceSwatch({ id }: { id: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (ref.current) drawSwatch(ref.current, id);
+  }, [id]);
+  return <canvas ref={ref} aria-hidden style={{ width: 56, height: 32 }} />;
 }
