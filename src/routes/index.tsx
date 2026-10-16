@@ -121,7 +121,7 @@ function Index() {
     const r = canvasRef.current!.getBoundingClientRect();
     return [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H];
   };
-  const insideBoard = (x: number, y: number) =>
+  const insideBoard = (x: number, y: number) => !!boardRef.current &&
     canvasRef.current!.getContext("2d")!.isPointInPath(boardRef.current!, x, y);
   const insidePot = (x: number, y: number) =>
     Math.hypot(x - SUGAR_POT.x, y - SUGAR_POT.y) < SUGAR_POT.r;
