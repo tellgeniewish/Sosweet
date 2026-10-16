@@ -29,38 +29,6 @@ export type Grain = { x: number; y: number; r: number; a: number; rot: number };
 export type Blob = { x: number; y: number; r: number };
 export type SugarBatch = { grains: Grain[]; blobs: Blob[]; t: number };
 
-// Hotdog: plump, irregularly bumpy oval, slightly tilted, stick pointing right.
-const BODY = { cx: 740, cy: 430, rx: 540, ry: 148, tilt: -0.055 };
-const tp = (x: number, y: number): [number, number] => {
-  const c = Math.cos(BODY.tilt), s = Math.sin(BODY.tilt);
-  return [BODY.cx + x * c - y * s, BODY.cy + x * s + y * c];
-};
-
-export function bodyPath() {
-  const p = new Path2D();
-  const n = 220;
-  for (let i = 0; i <= n; i++) {
-    const t = (i / n) * Math.PI * 2;
-    const ct = Math.cos(t), st = Math.sin(t);
-    // superellipse base (fat capsule)
-    const e = 0.58;
-    const x = Math.sign(ct) * Math.pow(Math.abs(ct), e) * BODY.rx;
-    const taper = 1 - 0.07 * Math.max(0, -ct); // left end slightly narrower
-    const y = Math.sign(st) * Math.pow(Math.abs(st), 0.82) * BODY.ry * taper;
-    // irregular fried-batter bumps: layered sines, stronger near the rim
-    const bump =
-      1 +
-      Math.sin(i * 1.7 + 0.8) * 0.018 +
-      Math.sin(i * 3.1) * 0.014 +
-      Math.sin(i * 7.7 + 2.1) * 0.011 +
-      Math.sin(i * 13.3 + 4.2) * 0.008;
-    const [px, py] = tp(x * bump, y * bump);
-    i ? p.lineTo(px, py) : p.moveTo(px, py);
-  }
-  p.closePath();
-  return p;
-}
-
 function rng(seed: number) {
   return () => {
     seed = (seed * 16807) % 2147483647;
@@ -68,361 +36,196 @@ function rng(seed: number) {
   };
 }
 
-// ---------- sugar ----------
-function inBody() {
-  const path = bodyPath();
-  const c = document.createElement("canvas").getContext("2d")!;
-  return (x: number, y: number) => c.isPointInPath(path, x, y);
+// ---------- illustrated assets & layout (logical coords) ----------
+export const BOARD_RECT = { x: 150, y: 150, w: 1300, h: 650 };
+export const DOG_RECT = { x: 235, y: 300, w: 1150, h: 383 };
+const JAR_RECT = { x: 232, y: 4, w: 196, h: 196 };
+export const SUGAR_POT = { x: 330, y: 110, r: 100 };
+// Fraction of hotdog image width where the batter ends and the stick begins.
+const BATTER_END = 0.71;
+
+export type Assets = {
+  board: HTMLImageElement;
+  dog: HTMLImageElement;
+  jar: HTMLImageElement;
+  mask: HTMLCanvasElement; // batter-only alpha mask (no stick), logical size
+  maskData: Uint8ClampedArray;
+};
+
+let assets: Assets | null = null;
+export const getAssets = () => assets;
+
+function load(src: string) {
+  return new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = src;
+  });
 }
 
-export function makeGrains(count: number, rand: () => number = Math.random): Grain[] {
-  const inside = inBody();
-  const out: Grain[] = [];
-  while (out.length < count) {
-    const x = BODY.cx - BODY.rx + rand() * BODY.rx * 2;
-    const y = BODY.cy - BODY.ry - 40 + rand() * (BODY.ry * 2 + 80);
-    if (!inside(x, y)) continue;
-    // mostly fine crystals, a few larger ones
-    const k = rand();
-    const r = k > 0.9 ? 3.4 + rand() * 1.8 : k > 0.55 ? 2.2 + rand() * 1.2 : 1.2 + rand() * 1;
-    out.push({ x, y, r, a: 0.55 + rand() * 0.4, rot: rand() * Math.PI });
-  }
-  return out;
+export async function loadAssets(src: { board: string; dog: string; jar: string }) {
+  if (assets) return assets;
+  const [board, dog, jar] = await Promise.all([load(src.board), load(src.dog), load(src.jar)]);
+  const mask = document.createElement("canvas");
+  mask.width = W;
+  mask.height = H;
+  const m = mask.getContext("2d", { willReadFrequently: true })!;
+  m.drawImage(dog, DOG_RECT.x, DOG_RECT.y, DOG_RECT.w, DOG_RECT.h);
+  m.globalCompositeOperation = "destination-out";
+  m.fillRect(DOG_RECT.x + DOG_RECT.w * BATTER_END, 0, W, H);
+  assets = { board, dog, jar, mask, maskData: m.getImageData(0, 0, W, H).data };
+  return assets;
 }
 
-function makeBlobs(count: number, rand: () => number): Blob[] {
-  const inside = inBody();
-  const out: Blob[] = [];
-  while (out.length < count) {
-    const x = BODY.cx - BODY.rx + rand() * BODY.rx * 2;
-    const y = BODY.cy - BODY.ry + rand() * BODY.ry * 2;
-    if (!inside(x, y)) continue;
-    out.push({ x, y, r: 40 + rand() * 90 });
-  }
-  return out;
-}
-
-export function makeBatch(): SugarBatch {
-  return { grains: makeGrains(260), blobs: makeBlobs(22, Math.random), t: performance.now() };
-}
-
-export function initialSugar(): SugarBatch {
-  return { grains: makeGrains(190, rng(42)), blobs: [], t: 0 };
-}
-
-// Sugar canister: small clickable prop on the upper-left of the board.
-export const SUGAR_POT = { x: 205, y: 205, r: 92 };
+const inBatter = (x: number, y: number) => {
+  if (!assets) return false;
+  const xi = x | 0, yi = y | 0;
+  if (xi < 0 || yi < 0 || xi >= W || yi >= H) return false;
+  return assets.maskData[(yi * W + xi) * 4 + 3]! > 160;
+};
 
 export function boardPath() {
-  // paddle board: wide rounded body on the left, handle on the right, slight tilt
+  const { x, y, w, h } = BOARD_RECT;
   const p = new Path2D();
-  const c = Math.cos(-0.03), s = Math.sin(-0.03);
-  const T = (x: number, y: number): [number, number] => [800 + (x - 800) * c - (y - 420) * s, 420 + (x - 800) * s + (y - 420) * c];
-  const pts: [number, number][] = [];
-  const add = (x: number, y: number) => pts.push(T(x, y));
-  const R = 78;
-  const bx0 = 70, bx1 = 1360, by0 = 150, by1 = 700;
-  const arc = (cx: number, cy: number, a0: number, a1: number) => {
-    for (let i = 0; i <= 12; i++) { const a = a0 + ((a1 - a0) * i) / 12; add(cx + Math.cos(a) * R, cy + Math.sin(a) * R); }
-  };
-  arc(bx0 + R, by0 + R, Math.PI, Math.PI * 1.5);
-  add(bx1 - 40, by0);
-  add(bx1, by0 + 60); add(bx1 + 30, 340);
-  add(1560, 335); add(1590, 360); add(1590, 470); add(1560, 495);
-  add(bx1 + 30, 490); add(bx1, by1 - 70);
-  add(bx1 - 40, by1);
-  arc(bx0 + R, by1 - R, Math.PI * 0.5, Math.PI);
-  pts.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
-  p.closePath();
-  return { p, T };
+  p.roundRect(x + w * 0.015, y + h * 0.025, w * 0.775, h * 0.935, 40);
+  p.roundRect(x + w * 0.75, y + h * 0.32, w * 0.235, h * 0.26, 60);
+  return { p };
 }
 
 export function drawBoard(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = "#f8f0e0";
   ctx.fillRect(0, 0, W, H);
-  const { p, T } = boardPath();
-  // soft drop shadow
+  if (!assets) return;
+  const { x, y, w, h } = BOARD_RECT;
+  // soft ground shadow
   ctx.save();
-  ctx.translate(6, 16);
-  ctx.filter = "blur(10px)";
-  ctx.fillStyle = "rgba(120,85,45,0.16)";
-  ctx.fill(p);
-  ctx.restore();
-  // board edge (thickness)
-  ctx.save();
-  ctx.translate(0, 7);
-  ctx.fillStyle = "#c9a06c";
-  ctx.fill(p);
-  ctx.restore();
-  // board face: light oak
-  ctx.save();
-  ctx.fillStyle = "#e3c391";
-  ctx.fill(p);
-  ctx.clip(p);
-  // subtle radial warmth
-  const wg = ctx.createRadialGradient(700, 380, 80, 700, 420, 900);
-  wg.addColorStop(0, "rgba(255,240,210,0.5)");
-  wg.addColorStop(1, "rgba(170,120,60,0.18)");
-  ctx.fillStyle = wg;
-  ctx.fillRect(0, 0, W, H);
-  // fine, natural wood grain
-  const r = rng(7);
-  ctx.lineCap = "round";
-  for (let i = 0; i < 90; i++) {
-    const y = 120 + i * 6.5 + r() * 4;
-    ctx.strokeStyle = `rgba(160,115,60,${0.04 + r() * 0.07})`;
-    ctx.lineWidth = 0.7 + r() * 1.4;
-    ctx.beginPath();
-    for (let x = 40; x <= 1620; x += 50) {
-      const [px, py] = T(x, y + Math.sin(x / 230 + i * 0.6) * 4 + Math.sin(x / 67 + i) * 1.5);
-      x === 40 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-  }
-  // a few darker grain streaks & knots
-  for (let i = 0; i < 7; i++) {
-    const y = 180 + r() * 480;
-    ctx.strokeStyle = `rgba(140,95,45,${0.08 + r() * 0.06})`;
-    ctx.lineWidth = 1.6 + r() * 1.6;
-    ctx.beginPath();
-    for (let x = 60; x <= 1400; x += 60) {
-      const [px, py] = T(x, y + Math.sin(x / 300 + i * 2) * 6);
-      x === 60 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-  }
-  ctx.restore();
-  // thin, soft outline
-  ctx.strokeStyle = "rgba(150,105,55,0.55)";
-  ctx.lineWidth = 2;
-  ctx.stroke(p);
-}
-
-export function drawSugarPot(ctx: CanvasRenderingContext2D, tiltK: number, hover = false) {
-  // White ceramic canister with a "설탕" label. tiltK 0..1 tips it toward the hotdog.
-  const { x, y } = SUGAR_POT;
-  ctx.save();
-  ctx.fillStyle = "rgba(110,70,30,0.16)";
+  ctx.fillStyle = "rgba(120,80,40,0.12)";
   ctx.beginPath();
-  ctx.ellipse(x + 6, y + 58, 52, 11, 0, 0, Math.PI * 2);
+  ctx.roundRect(x + w * 0.02 + 8, y + h * 0.04 + 14, w * 0.77, h * 0.93, 40);
   ctx.fill();
-  const lift = hover ? -3 : 0;
-  ctx.translate(x + 40, y + 56);
-  ctx.rotate(tiltK * 0.55);
-  ctx.translate(-(x + 40), -(y + 56) + lift);
-  // body
-  const body = new Path2D();
-  body.moveTo(x - 44, y - 22);
-  body.bezierCurveTo(x - 46, y + 20, x - 44, y + 50, x - 34, y + 56);
-  body.lineTo(x + 34, y + 56);
-  body.bezierCurveTo(x + 44, y + 50, x + 46, y + 20, x + 44, y - 22);
-  body.closePath();
-  ctx.fillStyle = "#fbf8f1";
-  ctx.fill(body);
-  ctx.save();
-  ctx.clip(body);
-  // soft watercolor shading on the right side
-  const sg = ctx.createLinearGradient(x - 46, 0, x + 46, 0);
-  sg.addColorStop(0, "rgba(255,255,255,0.9)");
-  sg.addColorStop(0.55, "rgba(240,232,216,0.2)");
-  sg.addColorStop(1, "rgba(196,178,148,0.5)");
-  ctx.fillStyle = sg;
-  ctx.fillRect(x - 50, y - 30, 100, 90);
-  // sugar visible through the frosted window at the top
-  ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.fillRect(x - 50, y - 22, 100, 20);
-  const r = rng(5);
-  for (let i = 0; i < 40; i++) {
-    ctx.fillStyle = `rgba(200,188,165,${0.25 + r() * 0.3})`;
-    ctx.fillRect(x - 42 + r() * 84, y - 20 + r() * 16, 1.6, 1.6);
-  }
   ctx.restore();
-  ctx.strokeStyle = "rgba(150,120,85,0.55)";
-  ctx.lineWidth = 1.6;
-  ctx.stroke(body);
-  // label
-  ctx.fillStyle = "#f3e6cf";
-  ctx.beginPath();
-  ctx.roundRect(x - 34, y + 8, 68, 34, 8);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(170,120,70,0.5)";
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-  ctx.fillStyle = "#7a4a22";
-  ctx.font = '600 22px "IBM Plex Sans KR", sans-serif';
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("설탕", x, y + 26);
-  // wooden lid
-  ctx.fillStyle = "#c9a26e";
-  ctx.beginPath();
-  ctx.roundRect(x - 48, y - 38, 96, 18, 8);
-  ctx.fill();
-  ctx.fillStyle = "rgba(255,240,210,0.45)";
-  ctx.fillRect(x - 40, y - 34, 70, 3);
-  ctx.fillStyle = "#b08654";
-  ctx.beginPath();
-  ctx.roundRect(x - 10, y - 48, 20, 12, 5);
-  ctx.fill();
-  // glaze highlight
-  ctx.strokeStyle = "rgba(255,255,255,0.9)";
-  ctx.lineWidth = 3;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(x - 34, y - 10);
-  ctx.quadraticCurveTo(x - 37, y + 25, x - 30, y + 46);
-  ctx.stroke();
-  ctx.restore();
-  // pour stream while tilting
-  if (tiltK > 0.25) {
-    const rr = rng(Math.floor(tiltK * 50) + 3);
-    ctx.fillStyle = "rgba(255,255,255,0.95)";
-    for (let i = 0; i < 26; i++) {
-      const t = rr();
-      ctx.fillRect(x + 70 + t * 120 + rr() * 14, y + 20 + t * 150 + rr() * 10, 2.4, 2.4);
-    }
-  }
+  ctx.drawImage(assets.board, x, y, w, h);
 }
 
 export function drawHotdog(ctx: CanvasRenderingContext2D) {
-  // soft ground shadow
+  if (!assets) return;
+  const { x, y, w, h } = DOG_RECT;
+  // contact shadow under the hotdog
   ctx.save();
-  ctx.filter = "blur(18px)";
-  ctx.fillStyle = "rgba(95,55,20,0.26)";
-  const [sx, sy] = tp(10, BODY.ry + 12);
+  ctx.fillStyle = "rgba(90,50,15,0.16)";
   ctx.beginPath();
-  ctx.ellipse(sx, sy, BODY.rx * 0.9, 26, BODY.tilt, 0, Math.PI * 2);
+  ctx.ellipse(x + w * 0.37, y + h * 0.8, w * 0.36, h * 0.09, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(90,50,15,0.1)";
+  ctx.beginPath();
+  ctx.ellipse(x + w * 0.37, y + h * 0.82, w * 0.4, h * 0.12, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-  // stick (pale birch, pencil-like)
-  const [a0x, a0y] = tp(BODY.rx - 90, 0);
-  const [a1x, a1y] = tp(BODY.rx + 250, 0);
-  ctx.lineCap = "round";
-  ctx.strokeStyle = "#c9a874";
-  ctx.lineWidth = 30;
-  ctx.beginPath(); ctx.moveTo(a0x, a0y); ctx.lineTo(a1x, a1y); ctx.stroke();
-  ctx.strokeStyle = "#ecd6ac";
-  ctx.lineWidth = 25;
-  ctx.beginPath(); ctx.moveTo(a0x, a0y - 1.5); ctx.lineTo(a1x, a1y - 1.5); ctx.stroke();
-  ctx.strokeStyle = "rgba(165,125,75,0.35)";
-  ctx.lineWidth = 1;
-  for (const off of [-5, 2, 7]) {
-    ctx.beginPath(); ctx.moveTo(a0x, a0y + off); ctx.lineTo(a1x - 8, a1y + off); ctx.stroke();
-  }
-  // body
-  const p = bodyPath();
-  ctx.save();
-  ctx.fillStyle = "#dc9440";
-  ctx.fill(p);
-  ctx.clip(p);
-  ctx.save();
-  ctx.translate(BODY.cx, BODY.cy);
-  ctx.rotate(BODY.tilt);
-  const g = ctx.createLinearGradient(0, -BODY.ry, 0, BODY.ry);
-  g.addColorStop(0, "rgba(250,200,118,0.8)");
-  g.addColorStop(0.45, "rgba(232,160,70,0.15)");
-  g.addColorStop(1, "rgba(150,74,20,0.5)");
-  ctx.fillStyle = g;
-  ctx.fillRect(-BODY.rx - 20, -BODY.ry - 20, BODY.rx * 2 + 40, BODY.ry * 2 + 40);
-  ctx.restore();
-  const r = rng(99);
-  // watercolor blooms: uneven, deeper-fried patches and lighter pools
-  for (let i = 0; i < 70; i++) {
-    const [x, y] = tp((r() * 2 - 1) * BODY.rx * 0.95, (r() * 2 - 1) * BODY.ry * 0.9);
-    const rad = 30 + r() * 80;
-    const dark = r() > 0.45;
-    const rg = ctx.createRadialGradient(x, y, 0, x, y, rad);
-    rg.addColorStop(0, dark ? `rgba(170,82,20,${0.12 + r() * 0.14})` : `rgba(255,214,140,${0.12 + r() * 0.16})`);
-    rg.addColorStop(0.7, dark ? "rgba(170,82,20,0.04)" : "rgba(255,214,140,0.04)");
-    rg.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = rg;
-    ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-  }
-  // burnt edge near the stick and at the far left end
-  for (const [ex, rad, a] of [[BODY.rx - 50, 110, 0.6], [-BODY.rx + 30, 90, 0.3]] as const) {
-    const [jx, jy] = tp(ex, 0);
-    const bg = ctx.createRadialGradient(jx, jy, 4, jx, jy, rad);
-    bg.addColorStop(0, `rgba(95,40,10,${a})`);
-    bg.addColorStop(0.55, `rgba(130,60,16,${a * 0.45})`);
-    bg.addColorStop(1, "rgba(130,60,16,0)");
-    ctx.fillStyle = bg;
-    ctx.fillRect(jx - rad, jy - rad, rad * 2, rad * 2);
-  }
-  // colored-pencil hatching that follows the form
-  ctx.lineCap = "round";
-  for (let i = 0; i < 700; i++) {
-    const u = r() * 2 - 1, v = r() * 2 - 1;
-    const [x, y] = tp(u * BODY.rx, v * BODY.ry);
-    const len = 6 + r() * 12;
-    const ang = BODY.tilt + 0.9 + v * 0.5 + (r() - 0.5) * 0.3;
-    ctx.strokeStyle = v > 0.2 ? `rgba(140,64,16,${0.08 + r() * 0.1})` : `rgba(255,226,170,${0.1 + r() * 0.14})`;
-    ctx.lineWidth = 0.8 + r() * 0.9;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
-    ctx.stroke();
-  }
-  // fine batter crumbs (sparse, low contrast)
-  for (let i = 0; i < 900; i++) {
-    const [x, y] = tp((r() * 2 - 1) * BODY.rx, (r() * 2 - 1) * BODY.ry);
-    ctx.fillStyle = r() > 0.5 ? `rgba(150,70,16,${0.12 + r() * 0.12})` : `rgba(255,220,150,${0.14 + r() * 0.16})`;
-    ctx.beginPath();
-    ctx.ellipse(x, y, 1 + r() * 2.4, 0.8 + r() * 1.6, r() * 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // inner rim shade gives volume without a hard outline
-  ctx.lineWidth = 18;
-  ctx.strokeStyle = "rgba(140,66,18,0.16)";
-  ctx.filter = "blur(6px)";
-  ctx.stroke(p);
-  ctx.filter = "none";
-  ctx.restore();
-  ctx.strokeStyle = "rgba(150,76,22,0.35)";
-  ctx.lineWidth = 1.4;
-  ctx.stroke(p);
+  ctx.drawImage(assets.dog, x, y, w, h);
 }
 
-export function drawSugar(ctx: CanvasRenderingContext2D, batches: SugarBatch[], now: number) {
-  const p = bodyPath();
+export function drawSugarPot(ctx: CanvasRenderingContext2D, tiltK: number, hover = false) {
+  if (!assets) return;
+  const { x, y, w, h } = JAR_RECT;
   ctx.save();
-  ctx.clip(p);
+  ctx.fillStyle = "rgba(110,70,30,0.14)";
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2 + 10, y + h * 0.93, w * 0.3, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const lift = hover ? -4 : 0;
+  ctx.translate(x + w * 0.75, y + h * 0.9);
+  ctx.rotate(tiltK * 0.6);
+  ctx.drawImage(assets.jar, -w * 0.75, -h * 0.9 + lift, w, h);
+  ctx.restore();
+  // falling stream toward the hotdog
+  if (tiltK > 0.2) {
+    const rr = rng(Math.floor(tiltK * 40) + 3);
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    for (let i = 0; i < 34; i++) {
+      const t = rr();
+      ctx.fillRect(x + w * 0.85 + t * 110 + rr() * 16, y + h * 0.35 + t * 230 + rr() * 12, 2.6, 2.6);
+    }
+  }
+}
+
+// ---------- sugar ----------
+export function makeGrains(count: number, rand: () => number = Math.random): Grain[] {
+  const out: Grain[] = [];
+  let guard = 0;
+  while (out.length < count && guard++ < count * 60) {
+    const x = DOG_RECT.x + rand() * DOG_RECT.w * BATTER_END;
+    const y = DOG_RECT.y + rand() * DOG_RECT.h;
+    if (!inBatter(x, y)) continue;
+    const k = rand();
+    const r = k > 0.9 ? 3.4 + rand() * 1.6 : k > 0.55 ? 2.2 + rand() * 1.1 : 1.3 + rand() * 0.9;
+    out.push({ x, y, r, a: 0.6 + rand() * 0.35, rot: rand() * Math.PI });
+  }
+  return out;
+}
+
+function makeBlobs(count: number, rand: () => number): Blob[] {
+  const out: Blob[] = [];
+  let guard = 0;
+  while (out.length < count && guard++ < count * 60) {
+    const x = DOG_RECT.x + rand() * DOG_RECT.w * BATTER_END;
+    const y = DOG_RECT.y + rand() * DOG_RECT.h;
+    if (!inBatter(x, y)) continue;
+    out.push({ x, y, r: 50 + rand() * 90 });
+  }
+  return out;
+}
+
+export function makeBatch(): SugarBatch {
+  return { grains: makeGrains(240), blobs: makeBlobs(20, Math.random), t: performance.now() };
+}
+
+export function initialSugar(): SugarBatch {
+  // the illustration already carries a light dusting; add only a few glints
+  return { grains: makeGrains(70, rng(42)), blobs: [], t: 0 };
+}
+
+let sugarScratch: HTMLCanvasElement | null = null;
+export function drawSugar(ctx: CanvasRenderingContext2D, batches: SugarBatch[], now: number) {
+  if (!assets) return;
+  if (!sugarScratch) { sugarScratch = document.createElement("canvas"); sugarScratch.width = W; sugarScratch.height = H; }
+  const c = sugarScratch.getContext("2d")!;
+  c.globalCompositeOperation = "source-over";
+  c.clearRect(0, 0, W, H);
+  const lit = DOG_RECT.y + DOG_RECT.h * 0.42;
   for (const b of batches) {
     const k = b.t ? Math.min(1, (now - b.t) / 450) : 1;
-    // frosting: soft, uneven white blooms that build up batch by batch
     for (const bl of b.blobs) {
-      const rg = ctx.createRadialGradient(bl.x, bl.y, 0, bl.x, bl.y, bl.r);
-      rg.addColorStop(0, `rgba(255,252,246,${0.16 * k})`);
+      const rg = c.createRadialGradient(bl.x, bl.y, 0, bl.x, bl.y, bl.r);
+      rg.addColorStop(0, `rgba(255,252,246,${0.17 * k})`);
       rg.addColorStop(1, "rgba(255,252,246,0)");
-      ctx.fillStyle = rg;
-      ctx.fillRect(bl.x - bl.r, bl.y - bl.r, bl.r * 2, bl.r * 2);
+      c.fillStyle = rg;
+      c.fillRect(bl.x - bl.r, bl.y - bl.r, bl.r * 2, bl.r * 2);
     }
     const drop = (1 - k) * -70;
     for (const gr of b.grains) {
       const gy = gr.y + drop * (0.6 + (gr.r % 1) * 0.6);
-      ctx.save();
-      ctx.translate(gr.x, gy);
-      ctx.rotate(gr.rot);
       const s = gr.r;
-      // faint shadow so crystals sit on the batter
-      ctx.globalAlpha = 0.35 * k;
-      ctx.fillStyle = "#8a4a14";
-      ctx.fillRect(-s / 2 + 0.6, -s / 2 + 0.8, s, s * 0.85);
-      ctx.globalAlpha = gr.a * k;
-      ctx.fillStyle = "#fffdf7";
-      ctx.fillRect(-s / 2, -s / 2, s, s * 0.85);
-      ctx.restore();
-      // glints only on the lit upper half, only on bigger crystals
-      const [, ly] = [0, (gr.y - BODY.cy) / BODY.ry];
-      if (s > 3.2 && ly < -0.15 && k === 1 && (gr.rot * 10) % 1 < 0.5) {
-        ctx.globalAlpha = 0.85;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(gr.x - s * 0.9, gy - 0.5, s * 1.8, 1);
-        ctx.fillRect(gr.x - 0.5, gy - s * 0.9, 1, s * 1.8);
+      c.globalAlpha = 0.3 * k;
+      c.fillStyle = "#8a4a14";
+      c.fillRect(gr.x - s / 2 + 0.7, gy - s / 2 + 0.9, s, s * 0.85);
+      c.globalAlpha = gr.a * k;
+      c.fillStyle = "#fffdf7";
+      c.fillRect(gr.x - s / 2, gy - s / 2, s, s * 0.85);
+      if (s > 3.2 && gr.y < lit && k === 1 && (gr.rot * 10) % 1 < 0.5) {
+        c.globalAlpha = 0.85;
+        c.fillStyle = "#ffffff";
+        c.fillRect(gr.x - s * 0.9, gy - 0.5, s * 1.8, 1);
+        c.fillRect(gr.x - 0.5, gy - s * 0.9, 1, s * 1.8);
       }
     }
   }
-  ctx.globalAlpha = 1;
-  ctx.restore();
+  c.globalAlpha = 1;
+  // keep sugar strictly on the batter
+  c.globalCompositeOperation = "destination-in";
+  c.drawImage(assets.mask, 0, 0);
+  c.globalCompositeOperation = "source-over";
+  ctx.drawImage(sugarScratch, 0, 0);
 }
 
 // ---------- sauce ----------
@@ -498,15 +301,18 @@ export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[], sc
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = alpha;
-    if (blur) ctx.filter = `blur(${blur * scale}px)`;
+    void blur;
     ctx.drawImage(scratch!, 0, 0, bw, bh, x0 * scale, y0 * scale, bw, bh);
     ctx.restore();
   };
   // 1. contact shadow: soft, close — sauce sits ON the surface
   layer((c) => {
     c.fillStyle = c.strokeStyle = "#5a2a08";
-    for (const { s, pts } of prepared) trace(c, pts, s.width, 1.05, 1.5, 3.5);
-  }, 0.32, 3);
+    for (const { s, pts } of prepared) trace(c, pts, s.width, 1.22, 1.5, 3.5);
+    c.globalCompositeOperation = "destination-out";
+    c.globalAlpha = 0.5;
+    for (const { s, pts } of prepared) trace(c, pts, s.width, 0.9, 1.5, 3);
+  }, 0.3, 0);
   // 2. body: soft rim, then colour (per stroke so order is kept)
   for (const { s, pts } of prepared) {
     ctx.save();
