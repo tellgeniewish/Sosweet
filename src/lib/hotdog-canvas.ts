@@ -39,8 +39,8 @@ function rng(seed: number) {
 // ---------- illustrated assets & layout (logical coords) ----------
 export const BOARD_RECT = { x: 150, y: 150, w: 1300, h: 650 };
 export const DOG_RECT = { x: 235, y: 300, w: 1150, h: 383 };
-const JAR_RECT = { x: 232, y: 4, w: 196, h: 196 };
-export const SUGAR_POT = { x: 330, y: 110, r: 100 };
+const JAR_RECT = { x: 215, y: 0, w: 260, h: 260 };
+export const SUGAR_POT = { x: 345, y: 125, r: 120 };
 // Fraction of hotdog image width where the batter ends and the stick begins.
 const BATTER_END = 0.71;
 
@@ -100,9 +100,9 @@ export function drawBoard(ctx: CanvasRenderingContext2D) {
   const { x, y, w, h } = BOARD_RECT;
   // soft ground shadow
   ctx.save();
-  ctx.fillStyle = "rgba(120,80,40,0.12)";
+  ctx.fillStyle = "rgba(120,80,40,0.07)";
   ctx.beginPath();
-  ctx.roundRect(x + w * 0.02 + 8, y + h * 0.04 + 14, w * 0.77, h * 0.93, 40);
+  ctx.roundRect(x + w * 0.02 + 4, y + h * 0.04 + 8, w * 0.77, h * 0.93, 40);
   ctx.fill();
   ctx.restore();
   ctx.drawImage(assets.board, x, y, w, h);
