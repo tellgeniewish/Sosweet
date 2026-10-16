@@ -8,3 +8,4 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+- The board, hotdog and sugar jar are illustrated PNGs in src/assets drawn onto the canvas; sugar is masked to the hotdog image's alpha so it never lands on the stick or board.
