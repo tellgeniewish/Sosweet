@@ -16,7 +16,11 @@ import {
   initialSugar,
   type Stroke,
   type SugarBatch,
+  loadAssets,
 } from "@/lib/hotdog-canvas";
+import boardImg from "@/assets/board.png";
+import dogImg from "@/assets/hotdog.png";
+import jarImg from "@/assets/sugar-jar.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -86,6 +90,9 @@ function Index() {
   }, [render]);
 
   useEffect(() => {
+    let alive = true;
+    loadAssets({ board: boardImg, dog: dogImg, jar: jarImg }).then(() => {
+    if (!alive) return;
     const base = document.createElement("canvas");
     base.width = W;
     base.height = H;
@@ -103,15 +110,18 @@ function Index() {
     cv.width = W;
     cv.height = H;
     render();
-    document.fonts?.ready.then(() => render());
-    return () => cancelAnimationFrame(rafRef.current);
+    });
+    return () => {
+      alive = false;
+      cancelAnimationFrame(rafRef.current);
+    };
   }, [render]);
 
   const toLogical = (e: React.PointerEvent): [number, number] => {
     const r = canvasRef.current!.getBoundingClientRect();
     return [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H];
   };
-  const insideBoard = (x: number, y: number) =>
+  const insideBoard = (x: number, y: number) => !!boardRef.current &&
     canvasRef.current!.getContext("2d")!.isPointInPath(boardRef.current!, x, y);
   const insidePot = (x: number, y: number) =>
     Math.hypot(x - SUGAR_POT.x, y - SUGAR_POT.y) < SUGAR_POT.r;
