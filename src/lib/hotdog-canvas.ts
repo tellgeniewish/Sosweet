@@ -1,7 +1,7 @@
 // Logical canvas coordinates. All strokes & sugar are stored in this space,
 // so resizing the on-screen canvas never shifts them.
 export const W = 1600;
-export const H = 800;
+export const H = 1050;
 
 export type Sauce = {
   id: string;
@@ -37,10 +37,10 @@ function rng(seed: number) {
 }
 
 // ---------- illustrated assets & layout (logical coords) ----------
-export const BOARD_RECT = { x: 150, y: 150, w: 1300, h: 650 };
-export const DOG_RECT = { x: 235, y: 300, w: 1150, h: 383 };
-const JAR_RECT = { x: 215, y: 0, w: 260, h: 260 };
-export const SUGAR_POT = { x: 345, y: 125, r: 120 };
+export const BOARD_RECT = { x: 35, y: 340, w: 1530, h: 700 };
+export const DOG_RECT = { x: 110, y: 435, w: 1290, h: 460 };
+const JAR_RECT = { x: 650, y: 0, w: 350, h: 350 };
+export const SUGAR_POT = { x: 825, y: 170, r: 155 };
 // Fraction of hotdog image width where the batter ends and the stick begins.
 const BATTER_END = 0.71;
 
@@ -94,17 +94,9 @@ export function boardPath() {
 }
 
 export function drawBoard(ctx: CanvasRenderingContext2D) {
-  ctx.fillStyle = "#f8f0e0";
-  ctx.fillRect(0, 0, W, H);
+  ctx.clearRect(0, 0, W, H);
   if (!assets) return;
   const { x, y, w, h } = BOARD_RECT;
-  // soft ground shadow
-  ctx.save();
-  ctx.fillStyle = "rgba(120,80,40,0.07)";
-  ctx.beginPath();
-  ctx.roundRect(x + w * 0.02 + 4, y + h * 0.04 + 8, w * 0.77, h * 0.93, 40);
-  ctx.fill();
-  ctx.restore();
   ctx.drawImage(assets.board, x, y, w, h);
 }
 
