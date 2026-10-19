@@ -9,7 +9,6 @@ import {
   drawBoard,
   drawHotdog,
   drawStrokes,
-  drawSwatch,
   makeBatch,
   drawSugar,
   drawSugarPot,
@@ -21,6 +20,17 @@ import {
 import boardImg from "@/assets/board.png";
 import dogImg from "@/assets/hotdog.png";
 import jarImg from "@/assets/sugar-jar.png";
+import tabletopImg from "@/assets/tabletop.jpg";
+import ketchupImg from "@/assets/sauce-ketchup.png";
+import mustardImg from "@/assets/sauce-mustard.png";
+import mayoImg from "@/assets/sauce-mayo.png";
+import srirachaImg from "@/assets/sauce-sriracha.png";
+import cheeseImg from "@/assets/sauce-cheese.png";
+import bbqImg from "@/assets/sauce-bbq.png";
+import { Button } from "@/components/ui/button";
+import { Check, RotateCcw, Undo2 } from "lucide-react";
+
+const sauceImages = [ketchupImg, mustardImg, mayoImg, srirachaImg, cheeseImg, bbqImg];
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -67,6 +77,7 @@ function Index() {
     if (!cv || !baseRef.current) return;
     const ctx = cv.getContext("2d")!;
     const now = performance.now();
+    ctx.clearRect(0, 0, W, H);
     ctx.drawImage(baseRef.current, 0, 0);
     // sugar pot tilt animation (400ms)
     const potT = potAnimRef.current ? Math.min(1, (now - potAnimRef.current) / 400) : 0;
@@ -212,72 +223,61 @@ function Index() {
   };
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-background px-4 py-6 text-foreground md:py-8">
-      <header className="mx-auto max-w-2xl text-center">
-        <h1 className="font-display text-3xl tracking-tight text-primary md:text-[2.5rem]">소스윗 (Sosweet)</h1>
-        <p className="mt-2 text-base font-medium md:text-lg">소스로 쓰는 달콤한 한마디</p>
-        <p className="mt-1 text-xs text-muted-foreground md:text-sm">
-          마음은 말로 하기 쑥스러우니까, 핫도그에 써볼까?
-        </p>
+    <main className="sosweet-table min-h-screen overflow-x-hidden text-foreground" style={{ backgroundImage: `url(${tabletopImg})` }}>
+      <header className="sosweet-heading mx-auto text-center">
+        <h1 className="font-display text-2xl font-bold md:text-3xl">소스윗 <span className="text-sm font-normal">Sosweet</span></h1>
+        <p className="mt-1 text-sm">소스로 쓰는 달콤한 한마디</p>
       </header>
 
-      <div className="mx-auto mt-5 grid max-w-[1500px] gap-4 lg:grid-cols-[200px_minmax(0,1fr)_200px] lg:items-center">
-        <aside className="order-2 flex min-w-0 flex-col gap-3 lg:order-1">
+      <div className="sosweet-workspace mx-auto grid max-w-[1500px]">
+        <aside className="sauce-panel min-w-0">
           <div
             role="radiogroup"
             aria-label="소스 선택"
-            className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible"
+            className="sauce-list"
           >
-            {SAUCES.map((s) => (
-              <button
+            {SAUCES.map((s, i) => (
+              <Button
+                variant="ghost"
                 key={s.id}
                 role="radio"
                 aria-checked={sauce === s.id}
-                aria-pressed={sauce === s.id}
                 onClick={() => setSauce(s.id)}
-                className="chip shrink-0"
+                className="sauce-choice"
               >
-                <SauceSwatch id={s.id} />
-                <span className="whitespace-nowrap">{s.name}</span>
-              </button>
+                <img src={sauceImages[i]} alt="" className="sauce-pair" />
+                <span>{s.name}</span>
+                <span className="sauce-check" aria-hidden="true">{sauce === s.id && <Check />}</span>
+              </Button>
             ))}
           </div>
-          <div className="flex gap-2 lg:flex-col">
-            <button className="btn flex-1 px-3 text-sm" onClick={undoSugar} disabled={!sugarLevel}>
+          <div className="sugar-actions flex justify-center gap-2">
+            <Button variant="ghost" className="text-xs" onClick={undoSugar} disabled={!sugarLevel}>
               설탕 되돌리기
-            </button>
-            <button className="btn flex-1 px-3 text-sm" onClick={resetSugar} disabled={!sugarLevel} aria-label="설탕 초기화">
+            </Button>
+            <Button variant="ghost" className="text-xs" onClick={resetSugar} disabled={!sugarLevel} aria-label="설탕 초기화">
               설탕 처음으로
-            </button>
+            </Button>
           </div>
-          <p className="text-center text-xs text-muted-foreground lg:text-left">
-            설탕은 도마 위 ‘설탕’ 통을 눌러 뿌려요. (추가 {sugarLevel}번)
-          </p>
+          <output className="sr-only" aria-live="polite">설탕 추가 {sugarLevel}번</output>
         </aside>
 
-        <section className="order-1 min-w-0 lg:order-2">
+        <section className="drawing-scene min-w-0">
           <canvas
             ref={canvasRef}
             aria-label="핫도그 드로잉 영역. 핫도그나 도마 위를 드래그해서 소스로 글씨를 써보세요."
-            className="mx-auto block aspect-[2/1] w-full max-w-[1100px] cursor-crosshair touch-none select-none rounded-3xl"
+            className="mx-auto block aspect-[32/21] w-full cursor-crosshair touch-none select-none"
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
             onPointerCancel={onUp}
           />
-          <div className="mt-4 flex flex-wrap justify-center gap-3">
-            <button className="btn" onClick={undo} disabled={!strokeCount}>
-              ↶ 실행 취소
-            </button>
-            <button className="btn" onClick={clearAll} disabled={!strokeCount}>
-              전체 지우기
-            </button>
-            <button className="btn btn-primary" onClick={finish}>
-              완성하기
-            </button>
-          </div>
         </section>
-        <div className="order-3 hidden lg:block" />
+        <div className="scene-actions flex flex-wrap justify-center gap-3">
+          <Button variant="outline" className="scene-button" onClick={undo} disabled={!strokeCount} aria-label="실행 취소"><Undo2 /> 실행 취소</Button>
+          <Button variant="outline" className="scene-button" onClick={clearAll} disabled={!strokeCount}><RotateCcw /> 다시하기</Button>
+          <Button className="scene-button" onClick={finish}><Check /> 완성하기</Button>
+        </div>
       </div>
 
       {preview && (
@@ -292,12 +292,10 @@ function Index() {
             <h2 className="text-center font-display text-2xl tracking-tight">완성! 🌭</h2>
             <img src={preview} alt="완성한 핫도그" className="mt-4 w-full rounded-2xl" />
             <div className="mt-4 flex justify-center gap-3">
-              <button className="btn" onClick={() => setPreview(null)}>
+              <Button variant="outline" onClick={() => setPreview(null)}>
                 계속 꾸미기
-              </button>
-              <a className="btn btn-primary" href={preview} download="sosweet-hotdog.png">
-                PNG로 저장
-              </a>
+              </Button>
+              <Button asChild><a href={preview} download="sosweet-hotdog.png">PNG로 저장</a></Button>
             </div>
           </div>
         </div>
@@ -306,11 +304,3 @@ function Index() {
   );
 }
 
-// Sauce sample rendered with the same renderer used on the hotdog.
-function SauceSwatch({ id }: { id: string }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    if (ref.current) drawSwatch(ref.current, id);
-  }, [id]);
-  return <canvas ref={ref} aria-hidden style={{ width: 56, height: 32 }} />;
-}

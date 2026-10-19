@@ -9,3 +9,4 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 - The board, hotdog and sugar jar are illustrated PNGs in src/assets drawn onto the canvas; sugar is masked to the hotdog image's alpha so it never lands on the stick or board.
+- Sauce choices use individual illustrated bottle-and-dollop assets and the shared Button component; CSS grid places them beside the canvas on desktop and after it on mobile so drawing coordinates stay independent of layout.
