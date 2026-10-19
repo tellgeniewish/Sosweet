@@ -113,7 +113,7 @@
   }
 }
 
-.sosweet-table { background-size: 100% auto; background-position: center top; background-repeat: repeat-y; padding: 24px 20px 40px; }
+.sosweet-table { background-size: 100% auto, 700px auto; background-position: center top; background-repeat: no-repeat, repeat; padding: 24px 20px 40px; }
 .sosweet-heading { width: fit-content; max-width: 70%; }
 .sosweet-workspace { grid-template-columns: 220px minmax(0, 1fr); gap: 12px; }
 .drawing-scene { grid-column: 2; grid-row: 1; }
@@ -129,7 +129,7 @@
 .scene-actions { grid-column: 2; }
 .scene-button { height: 46px; border-radius: 24px; padding: 0 22px; }
 @media (max-width: 767px) {
-  .sosweet-table { padding: 22px 10px 28px; background-size: auto 650px; }
+  .sosweet-table { padding: 22px 10px 28px; background-size: auto 650px, 700px auto; }
   .sosweet-heading { background: color-mix(in oklch, var(--background) 82%, transparent); padding: 4px 16px; border-radius: 8px; }
   .sosweet-workspace { grid-template-columns: minmax(0,1fr); gap: 14px; }
   .drawing-scene { grid-column: 1; grid-row: 1; margin-top: 8px; }

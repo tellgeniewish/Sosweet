@@ -21,6 +21,7 @@ import boardImg from "@/assets/board.png";
 import dogImg from "@/assets/hotdog.png";
 import jarImg from "@/assets/sugar-jar.png";
 import tabletopImg from "@/assets/tabletop.jpg";
+import woodTextureImg from "@/assets/wood-texture.jpg";
 import ketchupImg from "@/assets/sauce-ketchup.png";
 import mustardImg from "@/assets/sauce-mustard.png";
 import mayoImg from "@/assets/sauce-mayo.png";
@@ -223,7 +224,7 @@ function Index() {
   };
 
   return (
-    <main className="sosweet-table min-h-screen overflow-x-hidden text-foreground" style={{ backgroundImage: `url(${tabletopImg})` }}>
+    <main className="sosweet-table min-h-screen overflow-x-hidden text-foreground" style={{ backgroundImage: `url(${tabletopImg}), url(${woodTextureImg})` }}>
       <header className="sosweet-heading mx-auto text-center">
         <h1 className="font-display text-2xl font-bold md:text-3xl">소스윗 <span className="text-sm font-normal">Sosweet</span></h1>
         <p className="mt-1 text-sm">소스로 쓰는 달콤한 한마디</p>
