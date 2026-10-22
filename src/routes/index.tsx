@@ -7,10 +7,7 @@ import {
   W,
   boardPath,
   drawBoard,
-  drawHotdog,
-  drawStrokes,
   makeBatch,
-  drawSugar,
   drawSugarPot,
   initialSugar,
   type Stroke,
@@ -29,7 +26,10 @@ import srirachaImg from "@/assets/sauce-sriracha.png";
 import cheeseImg from "@/assets/sauce-cheese.png";
 import bbqImg from "@/assets/sauce-bbq.png";
 import { Button } from "@/components/ui/button";
-import { Check, RotateCcw, Undo2 } from "lucide-react";
+import { Check, RotateCcw, Undo2, Volume2, VolumeX, Scissors, Combine } from "lucide-react";
+import { FoodSound } from '@/lib/food-sound';
+import { FoodScene } from '@/lib/food-scene';
+import { cutProgress, TYPE_DURATION, type Surface } from '@/lib/food-geometry';
 
 const sauceImages = [ketchupImg, mustardImg, mayoImg, srirachaImg, cheeseImg, bbqImg];
 
@@ -49,7 +49,6 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const baseRef = useRef<HTMLCanvasElement | null>(null);
   const strokesRef = useRef<Stroke[]>([]);
   const curRef = useRef<Stroke | null>(null);
   const sugarRef = useRef<SugarBatch[]>([]);
@@ -57,44 +56,59 @@ function Index() {
   const rafRef = useRef(0);
   const potAnimRef = useRef(0); // timestamp of last pot click, 0 = idle
   const hoverRef = useRef(false);
-  const inkRef = useRef<HTMLCanvasElement | null>(null);
-  const rebuildInk = useCallback((strokes: Stroke[] = strokesRef.current) => {
-    const ink = inkRef.current;
-    if (!ink) return;
-    const c = ink.getContext("2d")!;
-    c.clearRect(0, 0, W, H);
-    c.save();
-    c.clip(boardRef.current!);
-    drawStrokes(c, strokes);
-    c.restore();
-  }, []);
-  const [sauce, setSauce] = useState(SAUCES[0]!.id);
+  const sceneRef = useRef<FoodScene | null>(null);
+  const soundRef = useRef<FoodSound | null>(null);
+  const openRef = useRef(0);
+  const mixRef = useRef(0);
+  const transitionRef = useRef<{ kind: 'cut' | 'join' | 'type'; start: number; from: number; to: number } | null>(null);
+  const dirtyRef = useRef(true);
+  const gestureRef = useRef(0);
+  const surfaceRef = useRef<Surface>('auto');
+  const [sauce, setSauce] = useState('ketchup');
   const [strokeCount, setStrokeCount] = useState(0);
   const [sugarLevel, setSugarLevel] = useState(0);
   const [preview, setPreview] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [potato, setPotato] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+  const rebuildInk = useCallback(() => { dirtyRef.current = true; }, []);
 
   const render = useCallback(() => {
-    const cv = canvasRef.current;
-    if (!cv || !baseRef.current) return;
-    const ctx = cv.getContext("2d")!;
+    const cv = canvasRef.current, scene = sceneRef.current;
+    const ctx = cv?.getContext('2d');
+    if (!ctx || !scene || !boardRef.current) return;
     const now = performance.now();
-    ctx.clearRect(0, 0, W, H);
-    ctx.drawImage(baseRef.current, 0, 0);
-    // sugar pot tilt animation (400ms)
+    const transition = transitionRef.current;
+    let knife: number | null = null;
+    if (transition) {
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      let done = false;
+      if (transition.kind === 'type') {
+        const t = Math.min(1, (now - transition.start) / (reduced ? 1 : TYPE_DURATION));
+        mixRef.current = transition.from + (transition.to - transition.from) * t * t * (3 - 2 * t);
+        dirtyRef.current = true; done = t === 1;
+      } else {
+        const progress = cutProgress(now - transition.start, transition.kind === 'join', reduced);
+        openRef.current = progress.open;
+        if (transition.kind === 'cut') knife = progress.knife;
+        done = progress.done;
+      }
+      if (done) { transitionRef.current = null; setBusy(false); knife = null; }
+    }
+    const sugarAnimating = sugarRef.current.some(b => b.t && now - b.t < 450);
+    if (dirtyRef.current || curRef.current || sugarAnimating) {
+      scene.rebuild(curRef.current ? [...strokesRef.current, curRef.current] : strokesRef.current, sugarRef.current, now, mixRef.current, boardRef.current);
+      dirtyRef.current = false;
+    }
+    drawBoard(ctx);
     const potT = potAnimRef.current ? Math.min(1, (now - potAnimRef.current) / 400) : 0;
-    const tiltK = potT > 0 ? Math.sin(potT * Math.PI) : 0;
+    drawSugarPot(ctx, potT > 0 ? Math.sin(potT * Math.PI) : 0, hoverRef.current);
     if (potT >= 1) potAnimRef.current = 0;
-    drawSugarPot(ctx, tiltK, hoverRef.current);
-    drawSugar(ctx, sugarRef.current, now);
-    ctx.save();
-    ctx.clip(boardRef.current!);
-    if (curRef.current) rebuildInk([...strokesRef.current, curRef.current]);
-    if (inkRef.current) ctx.drawImage(inkRef.current, 0, 0);
-    ctx.restore();
-    const animating =
-      sugarRef.current.some((b) => b.t && now - b.t < 450) || potT > 0;
-    if (animating) rafRef.current = requestAnimationFrame(render);
-  }, [rebuildInk]);
+    scene.draw(ctx, openRef.current, knife);
+    if (transitionRef.current || sugarAnimating || potAnimRef.current) rafRef.current = requestAnimationFrame(render);
+  }, []);
 
   const schedule = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -103,100 +117,124 @@ function Index() {
 
   useEffect(() => {
     let alive = true;
+    const sound = new FoodSound();
+    soundRef.current = sound;
+    try {
+      const enabled = localStorage.getItem('sosweet-sound') !== 'off';
+      sound.mute(enabled); setSoundEnabled(enabled);
+    } catch { /* Preferences are optional when storage is unavailable. */ }
+    const stop = () => sound.stop(undefined, true);
+    const visibility = () => { if (document.hidden) { onUp(); stop(); } };
+    document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('blur', stop);
     loadAssets({ board: boardImg, dog: dogImg, jar: jarImg }).then(() => {
-    if (!alive) return;
-    const base = document.createElement("canvas");
-    base.width = W;
-    base.height = H;
-    const b = base.getContext("2d")!;
-    drawBoard(b);
-    drawHotdog(b);
-    baseRef.current = base;
-    const ink = document.createElement("canvas");
-    ink.width = W;
-    ink.height = H;
-    inkRef.current = ink;
-    boardRef.current = boardPath().p;
-    sugarRef.current = [initialSugar()];
-    const cv = canvasRef.current!;
-    cv.width = W;
-    cv.height = H;
-    render();
+      if (!alive || !canvasRef.current) return;
+      boardRef.current = boardPath().p;
+      sugarRef.current = [initialSugar()];
+      canvasRef.current.width = W; canvasRef.current.height = H;
+      sceneRef.current = new FoodScene();
+      setReady(true); render();
     });
     return () => {
       alive = false;
+      document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('blur', stop);
+      sound.dispose();
       cancelAnimationFrame(rafRef.current);
     };
   }, [render]);
 
   const toLogical = (e: React.PointerEvent): [number, number] => {
-    const r = canvasRef.current!.getBoundingClientRect();
-    return [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H];
+    const r = canvasRef.current?.getBoundingClientRect();
+    return r ? [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H] : [0, 0];
   };
-  const insideBoard = (x: number, y: number) => !!boardRef.current &&
-    canvasRef.current!.getContext("2d")!.isPointInPath(boardRef.current!, x, y);
-  const insidePot = (x: number, y: number) =>
-    Math.hypot(x - SUGAR_POT.x, y - SUGAR_POT.y) < SUGAR_POT.r;
-
+  const insideBoard = (x: number, y: number) => {
+    const ctx = canvasRef.current?.getContext('2d'), path = boardRef.current;
+    return !!ctx && !!path && ctx.isPointInPath(path, x, y);
+  };
+  const insidePot = (x: number, y: number) => Math.hypot(x - SUGAR_POT.x, y - SUGAR_POT.y) < SUGAR_POT.r;
   const addSugar = useCallback(() => {
+    if (transitionRef.current || !sceneRef.current) return;
     sugarRef.current.push(makeBatch());
     setSugarLevel(sugarRef.current.length - 1);
     potAnimRef.current = performance.now();
-    schedule();
+    dirtyRef.current = true;
+    void soundRef.current?.gesture('sugar'); schedule();
   }, [schedule]);
 
   const onDown = (e: React.PointerEvent) => {
+    if (transitionRef.current || !sceneRef.current) return;
     const [x, y] = toLogical(e);
-    if (insidePot(x, y)) {
-      addSugar();
-      return;
-    }
+    if (insidePot(x, y)) { addSugar(); return; }
     if (!insideBoard(x, y)) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    curRef.current = { sauce, pts: [[x, y, 1]] };
-    schedule();
+    gestureRef.current++;
+    const hit = openRef.current ? sceneRef.current.hit(x, y, openRef.current, mixRef.current >= .5) : { x, y, surface: 'auto' as const };
+    surfaceRef.current = hit.surface;
+    curRef.current = { sauce, pts: [[hit.x, hit.y, 1]], surface: hit.surface, gesture: gestureRef.current };
+    void soundRef.current?.gesture('sauce'); schedule();
   };
   const onMove = (e: React.PointerEvent) => {
-    const cur = curRef.current;
-    if (!cur) {
-      const [hx, hy] = toLogical(e);
-      const over = insidePot(hx, hy);
-      canvasRef.current!.style.cursor = over ? "pointer" : insideBoard(hx, hy) ? "crosshair" : "default";
+    if (transitionRef.current) return;
+    const cv = canvasRef.current;
+    if (!cv) return;
+    if (!curRef.current) {
+      const [x, y] = toLogical(e), over = insidePot(x, y);
+      cv.style.cursor = over ? 'pointer' : insideBoard(x, y) ? 'crosshair' : 'default';
       if (over !== hoverRef.current) { hoverRef.current = over; schedule(); }
       return;
     }
-    const coalesced = e.nativeEvent.getCoalescedEvents?.();
-    const events = coalesced?.length ? coalesced : [e.nativeEvent];
-    const s = SAUCES.find((x) => x.id === cur.sauce)!;
-    const r = canvasRef.current!.getBoundingClientRect();
-    for (const ev of events) {
-      const x = ((ev.clientX - r.left) / r.width) * W;
-      const y = ((ev.clientY - r.top) / r.height) * H;
-      const last = cur.pts[cur.pts.length - 1]!;
-      const d = Math.hypot(x - last[0], y - last[1]);
-      if (d < 2) continue;
-      // interpolate so fast moves stay continuous
-      const steps = Math.ceil(d / 6);
-      for (let i = 1; i <= steps; i++) {
-        const t = i / steps;
-        const wf = 1 + (Math.random() - 0.5) * s.wobble * 0.5;
-        const prev = cur.pts[cur.pts.length - 1]![2];
-        cur.pts.push([last[0] + (x - last[0]) * t, last[1] + (y - last[1]) * t, prev * 0.85 + wf * 0.15]);
+    const r = cv.getBoundingClientRect();
+    const events = e.nativeEvent.getCoalescedEvents?.();
+    let added = false;
+    for (const ev of events?.length ? events : [e.nativeEvent]) {
+      const x = (ev.clientX - r.left) / r.width * W, y = (ev.clientY - r.top) / r.height * H;
+      let cur = curRef.current;
+      if (!cur || !insideBoard(x, y)) continue;
+      const hit = openRef.current ? sceneRef.current?.hit(x, y, openRef.current, mixRef.current >= .5) : { x, y, surface: 'auto' as const };
+      if (!hit) continue;
+      if (hit.surface !== surfaceRef.current) {
+        strokesRef.current.push(cur);
+        cur = { sauce: cur.sauce, pts: [[hit.x, hit.y, 1]], surface: hit.surface, gesture: gestureRef.current };
+        curRef.current = cur; surfaceRef.current = hit.surface; added = true; continue;
       }
+      const last = cur.pts.at(-1);
+      if (!last) continue;
+      const d = Math.hypot(hit.x - last[0], hit.y - last[1]);
+      if (d < 2) continue;
+      const steps = Math.ceil(d / 6);
+      for (let i = 1; i <= steps; i++) cur.pts.push([last[0] + (hit.x - last[0]) * i / steps, last[1] + (hit.y - last[1]) * i / steps, 1]);
+      added = true;
     }
-    schedule();
+    if (added) { void soundRef.current?.gesture('sauce'); schedule(); }
   };
   const onUp = () => {
+    soundRef.current?.stop('sauce');
     if (!curRef.current) return;
-    strokesRef.current.push(curRef.current);
-    curRef.current = null;
-    rebuildInk();
-    setStrokeCount(strokesRef.current.length);
-    schedule();
+    strokesRef.current.push(curRef.current); curRef.current = null;
+    rebuildInk(); setStrokeCount(strokesRef.current.length); schedule();
+  };
+  const changeType = (next: boolean) => {
+    if (transitionRef.current || next === potato || !ready) return;
+    onUp(); setPotato(next); setBusy(true);
+    transitionRef.current = { kind: 'type', start: performance.now(), from: mixRef.current, to: next ? 1 : 0 };
+    soundRef.current?.stop(); schedule();
+  };
+  const toggleCut = () => {
+    if (transitionRef.current || !ready) return;
+    onUp(); setOpened(!opened); setBusy(true);
+    transitionRef.current = { kind: opened ? 'join' : 'cut', start: performance.now(), from: openRef.current, to: opened ? 0 : 1 };
+    soundRef.current?.stop(); schedule();
+  };
+  const toggleSound = () => {
+    const enabled = !soundEnabled;
+    setSoundEnabled(enabled); soundRef.current?.mute(enabled);
+    try { localStorage.setItem('sosweet-sound', enabled ? 'on' : 'off'); } catch { /* optional */ }
   };
 
   const undo = () => {
-    strokesRef.current.pop();
+    const lastGesture = strokesRef.current.at(-1)?.gesture;
+    do { strokesRef.current.pop(); } while (lastGesture !== undefined && strokesRef.current.at(-1)?.gesture === lastGesture);
     rebuildInk();
     setStrokeCount(strokesRef.current.length);
     schedule();
@@ -210,22 +248,26 @@ function Index() {
   const undoSugar = () => {
     if (sugarRef.current.length > 1) sugarRef.current.pop();
     setSugarLevel(sugarRef.current.length - 1);
+    rebuildInk();
     schedule();
   };
   const resetSugar = () => {
     sugarRef.current = sugarRef.current.slice(0, 1);
     setSugarLevel(0);
+    rebuildInk();
     schedule();
   };
   const finish = () => {
+    onUp();
     sugarRef.current.forEach((b) => (b.t = 0));
     potAnimRef.current = 0;
     render();
-    setPreview(canvasRef.current!.toDataURL("image/png"));
+    setPreview(canvasRef.current?.toDataURL("image/png") ?? null);
   };
 
   return (
     <main className="sosweet-table min-h-screen overflow-x-hidden text-foreground" style={{ backgroundImage: `url(${tabletopImg}), url(${woodTextureImg})` }}>
+      <Button variant="outline" size="icon" className="sound-toggle" aria-label={soundEnabled ? '효과음 켜짐' : '효과음 꺼짐'} title={soundEnabled ? '효과음 켜짐' : '효과음 꺼짐'} aria-pressed={soundEnabled} onClick={toggleSound}>{soundEnabled ? <Volume2 /> : <VolumeX />}</Button>
       <header className="sosweet-heading mx-auto text-center">
         <h1 className="font-display text-2xl font-bold md:text-3xl">소스윗 <span className="text-sm font-normal">Sosweet</span></h1>
         <p className="mt-1 text-sm">소스로 쓰는 달콤한 한마디</p>
@@ -254,10 +296,10 @@ function Index() {
             ))}
           </div>
           <div className="sugar-actions flex justify-center gap-2">
-            <Button variant="ghost" className="text-xs" onClick={undoSugar} disabled={!sugarLevel}>
+            <Button variant="ghost" className="text-xs" onClick={undoSugar} disabled={!sugarLevel || busy}>
               설탕 되돌리기
             </Button>
-            <Button variant="ghost" className="text-xs" onClick={resetSugar} disabled={!sugarLevel} aria-label="설탕 초기화">
+            <Button variant="ghost" className="text-xs" onClick={resetSugar} disabled={!sugarLevel || busy} aria-label="설탕 초기화">
               설탕 처음으로
             </Button>
           </div>
@@ -273,12 +315,21 @@ function Index() {
             onPointerMove={onMove}
             onPointerUp={onUp}
             onPointerCancel={onUp}
+            onLostPointerCapture={onUp}
+            aria-busy={busy}
           />
         </section>
         <div className="scene-actions flex flex-wrap justify-center gap-3">
-          <Button variant="outline" className="scene-button" onClick={undo} disabled={!strokeCount} aria-label="실행 취소"><Undo2 /> 실행 취소</Button>
-          <Button variant="outline" className="scene-button" onClick={clearAll} disabled={!strokeCount}><RotateCcw /> 다시하기</Button>
-          <Button className="scene-button" onClick={finish}><Check /> 완성하기</Button>
+          <div className="food-tools flex w-full flex-wrap justify-center gap-2">
+            <div role="group" aria-label="핫도그 종류" className="flex gap-1">
+              <Button variant={potato ? 'outline' : 'default'} className="scene-button" aria-pressed={!potato} disabled={busy || !ready} onClick={() => changeType(false)}>기본 핫도그</Button>
+              <Button variant={potato ? 'default' : 'outline'} className="scene-button" aria-pressed={potato} disabled={busy || !ready} onClick={() => changeType(true)}>감자 핫도그</Button>
+            </div>
+            <Button variant="outline" className="scene-button" disabled={busy || !ready} onClick={toggleCut}>{opened ? <Combine /> : <Scissors />}{opened ? '다시 합치기' : '반 가르기'}</Button>
+          </div>
+          <Button variant="outline" className="scene-button" onClick={undo} disabled={!strokeCount || busy} aria-label="실행 취소"><Undo2 /> 실행 취소</Button>
+          <Button variant="outline" className="scene-button" onClick={clearAll} disabled={!strokeCount || busy}><RotateCcw /> 다시하기</Button>
+          <Button className="scene-button" onClick={finish} disabled={busy || !ready}><Check /> 완성하기</Button>
         </div>
       </div>
 
