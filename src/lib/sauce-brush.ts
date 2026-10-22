@@ -3,7 +3,7 @@ export type Sauce = {
   id: string; name: string; color: string; dark: string; light: string;
   width: number; wobble: number; gloss: number; edge: number;
 };
-export type Stroke = { sauce: string; pts: [number, number, number][] };
+export type Stroke = { sauce: string; pts: [number, number, number][]; surface?: 'auto' | 'board' | 'upper' | 'lower'; gesture?: number };
 export const SAUCES: Sauce[] = [
   { id: "ketchup", name: "케첩", color: "#dd261b", dark: "#a51b12", light: "#ffe7c3", width: 21, wobble: 0.06, gloss: 0.68, edge: 1 },
   { id: "mustard", name: "머스터드", color: "#f2bc25", dark: "#cb851b", light: "#fff0b4", width: 19, wobble: 0.08, gloss: 0.36, edge: 1.04 },
