@@ -125,7 +125,7 @@ export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[], sc
       // Broad quiet upper face plus short cream glints. World coordinates make
       // their phase invariant under cropped redraw, undo, resize and export.
       const patch = Math.max(0, (Math.sin((x + left) * .087 + (y + top) * .053) - .72) / .28);
-      const specular = Math.exp(-((facing - .64) / .13) ** 2) * patch * sauce.gloss * .66;
+      const specular = Math.exp(-(((facing - .64) / .13) ** 2)) * patch * sauce.gloss * .66;
       const lit = Math.min(.65, diffuse + specular);
       for (let channel = 0; channel < 3; channel++) {
         const b = base[channel] ?? 0, s = dark[channel] ?? 0, l = light[channel] ?? 255;
