@@ -120,12 +120,12 @@ export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Stroke[], sc
       const nx = (height(distances[i + 1] ?? 0) - height(distances[i - 1] ?? 0)) * radius / 2;
       const ny = (height(distances[i + w] ?? 0) - height(distances[i - w] ?? 0)) * radius / 2;
       const facing = (nx + ny) / Math.sqrt(1 + nx * nx + ny * ny);
-      const shade = Math.min(.48, .08 + (1 - crown) * .18 + Math.max(0, -facing) * .24);
-      const diffuse = Math.max(0, facing) * .18 + crown * .06;
+      const shade = Math.min(.7, .06 + (1 - crown) * .22 + Math.max(0, -facing) * .4);
+      const diffuse = Math.max(0, facing) * .25 + crown * .07;
       // Broad quiet upper face plus short cream glints. World coordinates make
       // their phase invariant under cropped redraw, undo, resize and export.
       const patch = Math.max(0, (Math.sin((x + left) * .087 + (y + top) * .053) - .72) / .28);
-      const specular = Math.exp(-(((facing - .64) / .13) ** 2)) * patch * sauce.gloss * .66;
+      const specular = Math.exp(-(((facing - .78) / .22) ** 2)) * patch * sauce.gloss * .85;
       const lit = Math.min(.65, diffuse + specular);
       for (let channel = 0; channel < 3; channel++) {
         const b = base[channel] ?? 0, s = dark[channel] ?? 0, l = light[channel] ?? 255;
