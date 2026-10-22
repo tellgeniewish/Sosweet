@@ -88,8 +88,8 @@ function Index() {
     drawSugar(ctx, sugarRef.current, now);
     ctx.save();
     ctx.clip(boardRef.current!);
-    if (inkRef.current) ctx.drawImage(inkRef.current, 0, 0);
-    if (curRef.current) drawStrokes(ctx, [curRef.current]);
+    if (curRef.current) drawStrokes(ctx, [...strokesRef.current, curRef.current]);
+    else if (inkRef.current) ctx.drawImage(inkRef.current, 0, 0);
     ctx.restore();
     const animating =
       sugarRef.current.some((b) => b.t && now - b.t < 450) || potT > 0;
@@ -165,7 +165,8 @@ function Index() {
       if (over !== hoverRef.current) { hoverRef.current = over; schedule(); }
       return;
     }
-    const events = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent];
+    const coalesced = e.nativeEvent.getCoalescedEvents?.();
+    const events = coalesced?.length ? coalesced : [e.nativeEvent];
     const s = SAUCES.find((x) => x.id === cur.sauce)!;
     const r = canvasRef.current!.getBoundingClientRect();
     for (const ev of events) {
