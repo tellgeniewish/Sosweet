@@ -1,0 +1,128 @@
+import { W, H, DOG_RECT, getAssets, drawHotdog, drawSugar, drawStrokes, type Stroke, type SugarBatch } from './hotdog-canvas';
+import { BODY_END, CUT_Y, FOOD_PIVOT, surfaceTransform, mapSurfacePoint, type Surface } from './food-geometry';
+
+function layer() {
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  return canvas;
+}
+
+// Illustration pigments, shared by the painted potato and exposed filling.
+const pigments = { potato: '#efb64e', top: '#ffda80', side: '#c88732', edge: '#ad6c2b', dough: '#ffe8ad', crumb: '#d49b49', sausage: '#cd7852', sausageLight: '#eca77f', shadow: 'rgba(94,55,27,.16)', blade: '#e5e4d8', bladeEdge: '#8c9186', handle: '#805438' };
+
+export class FoodScene {
+  private regular = layer();
+  private potato = layer();
+  private regularMask = layer();
+  private potatoMask = layer();
+  private food = layer();
+  private boardInk = layer();
+  private combinedInk = layer();
+  private temporary = layer();
+  private upper = layer();
+  private lower = layer();
+
+  constructor() {
+    const assets = getAssets();
+    const regular = this.regular.getContext('2d'), potato = this.potato.getContext('2d');
+    if (!assets || !regular || !potato) return;
+    drawHotdog(regular);
+    potato.drawImage(this.regular, 0, 0);
+    const rm = this.regularMask.getContext('2d');
+    rm?.drawImage(assets.dog, DOG_RECT.x, DOG_RECT.y, DOG_RECT.w, DOG_RECT.h);
+    const mask = this.regularMask.getContext('2d', { willReadFrequently: true });
+    const pixels = mask?.getImageData(0, 0, W, H).data;
+    let seed = 91;
+    const random = () => { seed = seed * 16807 % 2147483647; return seed / 2147483647; };
+    for (let row = 0; row < 9; row++) for (let col = 0; col < 27; col++) {
+      const x = DOG_RECT.x + 38 + col * 35 + (row % 2) * 17 + (random() - .5) * 15;
+      const y = DOG_RECT.y + 95 + row * 32 + (random() - .5) * 13;
+      if (x > BODY_END - 35 || (pixels?.[((y | 0) * W + (x | 0)) * 4 + 3] ?? 0) < 160) continue;
+      const size = 23 + random() * 13;
+      potato.save(); potato.translate(x, y); potato.rotate((random() - .5) * .7);
+      potato.fillStyle = pigments.shadow; potato.beginPath(); potato.roundRect(-size / 2 + 3, -size / 2 + 6, size, size, 5); potato.fill();
+      potato.fillStyle = pigments.side; potato.strokeStyle = pigments.edge; potato.lineWidth = 1.5;
+      potato.beginPath(); potato.moveTo(-size / 2, -size / 2); potato.lineTo(size / 2, -size / 2 + 3); potato.lineTo(size / 2 + 3, size / 2 + 5); potato.lineTo(-size / 2 + 3, size / 2 + 3); potato.closePath(); potato.fill(); potato.stroke();
+      potato.fillStyle = random() > .18 ? pigments.potato : pigments.side;
+      potato.beginPath(); potato.roundRect(-size / 2 - 2, -size / 2 - 5, size, size * .8, 4); potato.fill(); potato.stroke();
+      potato.strokeStyle = pigments.top; potato.lineWidth = 3; potato.beginPath(); potato.moveTo(-size / 2 + 3, -size / 2); potato.lineTo(size / 2 - 6, -size / 2 + 1); potato.stroke();
+      potato.restore();
+    }
+    this.potatoMask.getContext('2d')?.drawImage(this.potato, 0, 0);
+  }
+
+  private getMask(potato: boolean) { return potato ? this.potatoMask : this.regularMask; }
+
+  hit(x: number, y: number, open: number, potato: boolean): { x: number; y: number; surface: Surface } {
+    const context = this.getMask(potato).getContext('2d', { willReadFrequently: true });
+    for (const surface of ['lower', 'upper'] as const) {
+      const [px, py] = mapSurfacePoint(x, y, surface, open, true);
+      if (px < 0 || py < 0 || px >= W || py >= H) continue;
+      if (surface === 'upper' ? py > CUT_Y || px > BODY_END : py < CUT_Y && px <= BODY_END) continue;
+      if ((context?.getImageData(px | 0, py | 0, 1, 1).data[3] ?? 0) > 150) return { x: px, y: py, surface };
+    }
+    return { x, y, surface: 'board' };
+  }
+
+  rebuild(strokes: Stroke[], sugar: SugarBatch[], now: number, potatoMix: number, board: Path2D) {
+    const mask = this.getMask(potatoMix >= .5);
+    const food = this.food.getContext('2d'), ink = this.combinedInk.getContext('2d'), boardInk = this.boardInk.getContext('2d');
+    const temp = this.temporary.getContext('2d');
+    if (!food || !ink || !boardInk || !temp) return;
+    food.clearRect(0, 0, W, H);
+    food.drawImage(this.regular, 0, 0);
+    food.globalAlpha = potatoMix; food.drawImage(this.potato, 0, 0); food.globalAlpha = 1;
+    drawSugar(food, sugar, now);
+    ink.clearRect(0, 0, W, H);
+    drawStrokes(ink, strokes.filter(s => !s.surface || s.surface === 'auto'));
+    boardInk.clearRect(0, 0, W, H); boardInk.save(); boardInk.clip(board);
+    boardInk.drawImage(this.combinedInk, 0, 0);
+    boardInk.globalCompositeOperation = 'destination-out'; boardInk.drawImage(mask, 0, 0);
+    boardInk.globalCompositeOperation = 'source-over';
+    drawStrokes(boardInk, strokes.filter(s => s.surface === 'board'));
+    boardInk.restore();
+    for (const surface of ['upper', 'lower'] as const) {
+      const dest = this[surface].getContext('2d');
+      if (!dest) continue;
+      dest.clearRect(0, 0, W, H);
+      dest.drawImage(this.food, 0, 0);
+      temp.clearRect(0, 0, W, H); temp.drawImage(this.combinedInk, 0, 0);
+      drawStrokes(temp, strokes.filter(s => s.surface === surface));
+      temp.globalCompositeOperation = 'destination-in'; temp.drawImage(mask, 0, 0); temp.globalCompositeOperation = 'source-over';
+      dest.drawImage(this.temporary, 0, 0);
+      dest.globalCompositeOperation = 'destination-in'; dest.drawImage(mask, 0, 0); dest.globalCompositeOperation = 'source-over';
+      // The entire wooden stick belongs to the lower half.
+      dest.clearRect(0, surface === 'upper' ? CUT_Y : 0, surface === 'upper' ? W : BODY_END, surface === 'upper' ? H - CUT_Y : CUT_Y);
+      if (surface === 'upper') dest.clearRect(BODY_END, 0, W - BODY_END, H);
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, open: number, knife: number | null) {
+    ctx.drawImage(this.boardInk, 0, 0);
+    for (const surface of ['upper', 'lower'] as const) {
+      const { angle, dy } = surfaceTransform(surface, open);
+      ctx.save(); ctx.translate(FOOD_PIVOT, CUT_Y + dy); ctx.rotate(angle); ctx.translate(-FOOD_PIVOT, -CUT_Y);
+      if (open > 0) {
+        const x = DOG_RECT.x + 38, length = BODY_END - x - 30;
+        ctx.fillStyle = pigments.shadow; ctx.beginPath(); ctx.ellipse(x + length / 2 + 4, CUT_Y + 6, length / 2, 22 * open, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = pigments.crumb; ctx.beginPath(); ctx.ellipse(x + length / 2, CUT_Y, length / 2, 28 * open, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = pigments.dough; ctx.beginPath(); ctx.ellipse(x + length / 2, CUT_Y - 1, length / 2 - 5, 22 * open, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = pigments.sausage; ctx.beginPath(); ctx.ellipse(x + length / 2, CUT_Y, length / 2 - 24, 12 * open, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = pigments.sausageLight; ctx.lineWidth = 3 * open; ctx.beginPath(); ctx.moveTo(x + 46, CUT_Y - 4 * open); ctx.lineTo(x + length - 50, CUT_Y - 4 * open); ctx.stroke();
+      }
+      ctx.drawImage(this[surface], 0, 0);
+      ctx.restore();
+    }
+    if (knife !== null) {
+      const x = DOG_RECT.x + 35 + (BODY_END - DOG_RECT.x - 65) * knife;
+      ctx.strokeStyle = pigments.edge; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(DOG_RECT.x + 35, CUT_Y); ctx.lineTo(x, CUT_Y); ctx.stroke();
+      if (knife < 1) {
+        ctx.save(); ctx.translate(x, CUT_Y); ctx.rotate(-.3);
+        ctx.fillStyle = pigments.blade; ctx.strokeStyle = pigments.bladeEdge; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-65, -64); ctx.lineTo(25, -64); ctx.lineTo(25, -5); ctx.quadraticCurveTo(-48, 12, -65, -64); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = pigments.handle; ctx.beginPath(); ctx.roundRect(20, -63, 75, 24, 7); ctx.fill(); ctx.restore();
+      }
+    }
+  }
+}
