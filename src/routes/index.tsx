@@ -58,14 +58,14 @@ function Index() {
   const potAnimRef = useRef(0); // timestamp of last pot click, 0 = idle
   const hoverRef = useRef(false);
   const inkRef = useRef<HTMLCanvasElement | null>(null);
-  const rebuildInk = useCallback(() => {
+  const rebuildInk = useCallback((strokes: Stroke[] = strokesRef.current) => {
     const ink = inkRef.current;
     if (!ink) return;
     const c = ink.getContext("2d")!;
     c.clearRect(0, 0, W, H);
     c.save();
     c.clip(boardRef.current!);
-    drawStrokes(c, strokesRef.current);
+    drawStrokes(c, strokes);
     c.restore();
   }, []);
   const [sauce, setSauce] = useState(SAUCES[0]!.id);
@@ -88,13 +88,13 @@ function Index() {
     drawSugar(ctx, sugarRef.current, now);
     ctx.save();
     ctx.clip(boardRef.current!);
+    if (curRef.current) rebuildInk([...strokesRef.current, curRef.current]);
     if (inkRef.current) ctx.drawImage(inkRef.current, 0, 0);
-    if (curRef.current) drawStrokes(ctx, [curRef.current]);
     ctx.restore();
     const animating =
       sugarRef.current.some((b) => b.t && now - b.t < 450) || potT > 0;
     if (animating) rafRef.current = requestAnimationFrame(render);
-  }, []);
+  }, [rebuildInk]);
 
   const schedule = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -165,7 +165,8 @@ function Index() {
       if (over !== hoverRef.current) { hoverRef.current = over; schedule(); }
       return;
     }
-    const events = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent];
+    const coalesced = e.nativeEvent.getCoalescedEvents?.();
+    const events = coalesced?.length ? coalesced : [e.nativeEvent];
     const s = SAUCES.find((x) => x.id === cur.sauce)!;
     const r = canvasRef.current!.getBoundingClientRect();
     for (const ev of events) {
