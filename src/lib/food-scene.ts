@@ -112,8 +112,9 @@ export class FoodScene {
         ctx.fillStyle = pigments.shadow; ctx.beginPath(); ctx.ellipse(x + length / 2 + 4, CUT_Y + 6, length / 2, 22 * open, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = pigments.crumb; ctx.beginPath(); ctx.ellipse(x + length / 2, CUT_Y, length / 2, 28 * open, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = pigments.dough; ctx.beginPath(); ctx.ellipse(x + length / 2, CUT_Y - 1, length / 2 - 5, 22 * open, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = pigments.sausage; ctx.beginPath(); ctx.ellipse(x + length / 2, CUT_Y, length / 2 - 24, 12 * open, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = pigments.sausageLight; ctx.lineWidth = 3 * open; ctx.beginPath(); ctx.moveTo(x + 46, CUT_Y - 4 * open); ctx.lineTo(x + length - 50, CUT_Y - 4 * open); ctx.stroke();
+        const fillingY = CUT_Y + (surface === 'upper' ? 10 : -10) * open;
+        ctx.fillStyle = pigments.sausage; ctx.beginPath(); ctx.ellipse(x + length / 2, fillingY, length / 2 - 24, 9 * open, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = pigments.sausageLight; ctx.lineWidth = 3 * open; ctx.beginPath(); ctx.moveTo(x + 46, fillingY - 2 * open); ctx.lineTo(x + length - 50, fillingY - 2 * open); ctx.stroke();
         ctx.restore();
       }
       ctx.restore();
