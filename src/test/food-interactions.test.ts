@@ -40,7 +40,7 @@ describe('Quiet cancellable tool audio', () => {
       createGain() {
         const levels: number[] = [];
         ramps.push(levels);
-        const node = { gain: { value: 0, cancelScheduledValues: vi.fn(), setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn((value: number) => levels.push(value)), setTargetAtTime: vi.fn() } };
+        const node = { connect: vi.fn(), gain: { value: 0, cancelScheduledValues: vi.fn(), setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn((value: number) => levels.push(value)), setTargetAtTime: vi.fn() } };
         gains.push(node);
         return node;
       }
