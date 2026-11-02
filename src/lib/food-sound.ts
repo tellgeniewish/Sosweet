@@ -4,6 +4,7 @@ export class FoodSound {
   private sauce?: GainNode;
   private sugar?: GainNode;
   private sources: AudioBufferSourceNode[] = [];
+  private epochs = { sauce: 0, sugar: 0 };
   enabled = true;
 
   private async ready() {
@@ -42,9 +43,10 @@ export class FoodSound {
   }
 
   async gesture(tool: 'sauce' | 'sugar') {
+    const epoch = this.epochs[tool];
     if (!await this.ready()) return;
     const ctx = this.context, gain = this[tool];
-    if (!ctx || !gain || !this.enabled) return;
+    if (!ctx || !gain || !this.enabled || epoch !== this.epochs[tool]) return;
     const now = ctx.currentTime;
     gain.gain.cancelScheduledValues(now);
     gain.gain.setValueAtTime(gain.gain.value, now);
@@ -54,8 +56,9 @@ export class FoodSound {
 
   stop(tool?: 'sauce' | 'sugar', immediate = false) {
     const ctx = this.context;
-    if (!ctx) return;
     for (const name of tool ? [tool] : ['sauce', 'sugar'] as const) {
+      this.epochs[name]++;
+      if (!ctx) continue;
       const gain = this[name];
       if (!gain) continue;
       gain.gain.cancelScheduledValues(ctx.currentTime);

@@ -123,8 +123,8 @@ function Index() {
       const enabled = localStorage.getItem('sosweet-sound') !== 'off';
       sound.mute(enabled); setSoundEnabled(enabled);
     } catch { /* Preferences are optional when storage is unavailable. */ }
-    const stop = () => sound.stop(undefined, true);
-    const visibility = () => { if (document.hidden) { onUp(); stop(); } };
+    const stop = () => { onUp(); sound.stop(undefined, true); };
+    const visibility = () => { if (document.hidden) stop(); };
     document.addEventListener('visibilitychange', visibility);
     window.addEventListener('blur', stop);
     loadAssets({ board: boardImg, dog: dogImg, jar: jarImg }).then(() => {
@@ -163,7 +163,7 @@ function Index() {
   }, [schedule]);
 
   const onDown = (e: React.PointerEvent) => {
-    if (transitionRef.current || !sceneRef.current) return;
+    if (transitionRef.current || !sceneRef.current || curRef.current || !e.isPrimary || e.button !== 0) return;
     const [x, y] = toLogical(e);
     if (insidePot(x, y)) { addSugar(); return; }
     if (!insideBoard(x, y)) return;
@@ -172,7 +172,7 @@ function Index() {
     const hit = openRef.current ? sceneRef.current.hit(x, y, openRef.current, mixRef.current >= .5) : { x, y, surface: 'auto' as const };
     surfaceRef.current = hit.surface;
     curRef.current = { sauce, pts: [[hit.x, hit.y, 1]], surface: hit.surface, gesture: gestureRef.current };
-    void soundRef.current?.gesture('sauce'); schedule();
+    schedule();
   };
   const onMove = (e: React.PointerEvent) => {
     if (transitionRef.current) return;
@@ -213,6 +213,10 @@ function Index() {
     if (!curRef.current) return;
     strokesRef.current.push(curRef.current); curRef.current = null;
     rebuildInk(); setStrokeCount(strokesRef.current.length); schedule();
+  };
+  const onCancel = () => {
+    onUp();
+    soundRef.current?.stop(undefined, true);
   };
   const changeType = (next: boolean) => {
     if (transitionRef.current || next === potato || !ready) return;
@@ -258,6 +262,7 @@ function Index() {
     schedule();
   };
   const finish = () => {
+    if (transitionRef.current || !ready) return;
     onUp();
     sugarRef.current.forEach((b) => (b.t = 0));
     potAnimRef.current = 0;
@@ -314,7 +319,7 @@ function Index() {
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
-            onPointerCancel={onUp}
+            onPointerCancel={onCancel}
             onLostPointerCapture={onUp}
             aria-busy={busy}
           />

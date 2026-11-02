@@ -86,8 +86,8 @@ export class FoodScene {
       if (!dest) continue;
       dest.clearRect(0, 0, W, H);
       dest.drawImage(this.food, 0, 0);
-      temp.clearRect(0, 0, W, H); temp.drawImage(this.combinedInk, 0, 0);
-      drawStrokes(temp, strokes.filter(s => s.surface === surface));
+      temp.clearRect(0, 0, W, H);
+      drawStrokes(temp, strokes.filter(s => !s.surface || s.surface === 'auto' || s.surface === surface));
       temp.globalCompositeOperation = 'destination-in'; temp.drawImage(mask, 0, 0); temp.globalCompositeOperation = 'source-over';
       dest.drawImage(this.temporary, 0, 0);
       dest.globalCompositeOperation = 'destination-in'; dest.drawImage(mask, 0, 0); dest.globalCompositeOperation = 'source-over';
