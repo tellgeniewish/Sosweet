@@ -35,7 +35,7 @@ describe('Quiet cancellable tool audio', () => {
       state = 'running';
       destination = {};
       createBuffer() { return { getChannelData: () => new Float32Array(40) }; }
-      createBufferSource() { return { playbackRate: { value: 0 }, connect: () => ({ connect: () => {} }), start: vi.fn(), stop: vi.fn() }; }
+      createBufferSource() { return { playbackRate: { value: 0 }, connect: () => ({ connect: () => ({ connect: () => {} }) }), start: vi.fn(), stop: vi.fn() }; }
       createBiquadFilter() { return { frequency: { value: 0 } }; }
       createGain() {
         const levels: number[] = [];
