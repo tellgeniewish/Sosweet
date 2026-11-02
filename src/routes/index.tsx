@@ -63,6 +63,7 @@ function Index() {
   const transitionRef = useRef<{ kind: 'cut' | 'join' | 'type'; start: number; from: number; to: number } | null>(null);
   const dirtyRef = useRef(true);
   const gestureRef = useRef(0);
+  const activePointerRef = useRef<number | null>(null);
   const surfaceRef = useRef<Surface>('auto');
   const [sauce, setSauce] = useState('ketchup');
   const [strokeCount, setStrokeCount] = useState(0);
@@ -123,8 +124,8 @@ function Index() {
       const enabled = localStorage.getItem('sosweet-sound') !== 'off';
       sound.mute(enabled); setSoundEnabled(enabled);
     } catch { /* Preferences are optional when storage is unavailable. */ }
-    const stop = () => sound.stop(undefined, true);
-    const visibility = () => { if (document.hidden) { onUp(); stop(); } };
+    const stop = () => { onUp(); sound.stop(undefined, true); };
+    const visibility = () => { if (document.hidden) stop(); };
     document.addEventListener('visibilitychange', visibility);
     window.addEventListener('blur', stop);
     loadAssets({ board: boardImg, dog: dogImg, jar: jarImg }).then(() => {
@@ -163,19 +164,20 @@ function Index() {
   }, [schedule]);
 
   const onDown = (e: React.PointerEvent) => {
-    if (transitionRef.current || !sceneRef.current) return;
+    if (transitionRef.current || !sceneRef.current || curRef.current || !e.isPrimary || e.button !== 0) return;
     const [x, y] = toLogical(e);
     if (insidePot(x, y)) { addSugar(); return; }
     if (!insideBoard(x, y)) return;
     e.currentTarget.setPointerCapture(e.pointerId);
+    activePointerRef.current = e.pointerId;
     gestureRef.current++;
     const hit = openRef.current ? sceneRef.current.hit(x, y, openRef.current, mixRef.current >= .5) : { x, y, surface: 'auto' as const };
     surfaceRef.current = hit.surface;
     curRef.current = { sauce, pts: [[hit.x, hit.y, 1]], surface: hit.surface, gesture: gestureRef.current };
-    void soundRef.current?.gesture('sauce'); schedule();
+    schedule();
   };
   const onMove = (e: React.PointerEvent) => {
-    if (transitionRef.current) return;
+    if (transitionRef.current || (activePointerRef.current !== null && activePointerRef.current !== e.pointerId)) return;
     const cv = canvasRef.current;
     if (!cv) return;
     if (!curRef.current) {
@@ -189,7 +191,7 @@ function Index() {
     let added = false;
     for (const ev of events?.length ? events : [e.nativeEvent]) {
       const x = (ev.clientX - r.left) / r.width * W, y = (ev.clientY - r.top) / r.height * H;
-      let cur = curRef.current;
+      let cur: Stroke | null = curRef.current;
       if (!cur || !insideBoard(x, y)) continue;
       const hit = openRef.current ? sceneRef.current?.hit(x, y, openRef.current, mixRef.current >= .5) : { x, y, surface: 'auto' as const };
       if (!hit) continue;
@@ -208,11 +210,18 @@ function Index() {
     }
     if (added) { void soundRef.current?.gesture('sauce'); schedule(); }
   };
-  const onUp = () => {
+  const onUp = (e?: React.PointerEvent) => {
+    if (e && activePointerRef.current !== null && e.pointerId !== activePointerRef.current) return;
+    activePointerRef.current = null;
     soundRef.current?.stop('sauce');
     if (!curRef.current) return;
     strokesRef.current.push(curRef.current); curRef.current = null;
     rebuildInk(); setStrokeCount(strokesRef.current.length); schedule();
+  };
+  const onCancel = (e: React.PointerEvent) => {
+    if (activePointerRef.current !== null && e.pointerId !== activePointerRef.current) return;
+    onUp(e);
+    soundRef.current?.stop(undefined, true);
   };
   const changeType = (next: boolean) => {
     if (transitionRef.current || next === potato || !ready) return;
@@ -258,6 +267,7 @@ function Index() {
     schedule();
   };
   const finish = () => {
+    if (transitionRef.current || !ready) return;
     onUp();
     sugarRef.current.forEach((b) => (b.t = 0));
     potAnimRef.current = 0;
@@ -314,7 +324,7 @@ function Index() {
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
-            onPointerCancel={onUp}
+            onPointerCancel={onCancel}
             onLostPointerCapture={onUp}
             aria-busy={busy}
           />

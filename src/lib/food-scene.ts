@@ -86,8 +86,8 @@ export class FoodScene {
       if (!dest) continue;
       dest.clearRect(0, 0, W, H);
       dest.drawImage(this.food, 0, 0);
-      temp.clearRect(0, 0, W, H); temp.drawImage(this.combinedInk, 0, 0);
-      drawStrokes(temp, strokes.filter(s => s.surface === surface));
+      temp.clearRect(0, 0, W, H);
+      drawStrokes(temp, strokes.filter(s => !s.surface || s.surface === 'auto' || s.surface === surface));
       temp.globalCompositeOperation = 'destination-in'; temp.drawImage(mask, 0, 0); temp.globalCompositeOperation = 'source-over';
       dest.drawImage(this.temporary, 0, 0);
       dest.globalCompositeOperation = 'destination-in'; dest.drawImage(mask, 0, 0); dest.globalCompositeOperation = 'source-over';
@@ -102,15 +102,21 @@ export class FoodScene {
     for (const surface of ['upper', 'lower'] as const) {
       const { angle, dy } = surfaceTransform(surface, open);
       ctx.save(); ctx.translate(FOOD_PIVOT, CUT_Y + dy); ctx.rotate(angle); ctx.translate(-FOOD_PIVOT, -CUT_Y);
+      ctx.drawImage(this[surface], 0, 0);
       if (open > 0) {
         const x = DOG_RECT.x + 38, length = BODY_END - x - 30;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, surface === 'upper' ? CUT_Y : CUT_Y - 28 * open, length, 28 * open);
+        ctx.clip();
         ctx.fillStyle = pigments.shadow; ctx.beginPath(); ctx.ellipse(x + length / 2 + 4, CUT_Y + 6, length / 2, 22 * open, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = pigments.crumb; ctx.beginPath(); ctx.ellipse(x + length / 2, CUT_Y, length / 2, 28 * open, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = pigments.dough; ctx.beginPath(); ctx.ellipse(x + length / 2, CUT_Y - 1, length / 2 - 5, 22 * open, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = pigments.sausage; ctx.beginPath(); ctx.ellipse(x + length / 2, CUT_Y, length / 2 - 24, 12 * open, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = pigments.sausageLight; ctx.lineWidth = 3 * open; ctx.beginPath(); ctx.moveTo(x + 46, CUT_Y - 4 * open); ctx.lineTo(x + length - 50, CUT_Y - 4 * open); ctx.stroke();
+        const fillingY = CUT_Y + (surface === 'upper' ? 10 : -10) * open;
+        ctx.fillStyle = pigments.sausage; ctx.beginPath(); ctx.ellipse(x + length / 2, fillingY, length / 2 - 24, 9 * open, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = pigments.sausageLight; ctx.lineWidth = 3 * open; ctx.beginPath(); ctx.moveTo(x + 46, fillingY - 2 * open); ctx.lineTo(x + length - 50, fillingY - 2 * open); ctx.stroke();
+        ctx.restore();
       }
-      ctx.drawImage(this[surface], 0, 0);
       ctx.restore();
     }
     if (knife !== null) {
