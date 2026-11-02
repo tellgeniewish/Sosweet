@@ -1,9 +1,9 @@
 # Sosweet reference refresh
 # Food interactions
-- [ ] Add quiet movement-driven sauce and pouring sounds with remembered mute and cleanup.
-- [ ] Add stable potato hotdog with preserved decorations and soft transition.
-- [ ] Add reversible longitudinal cutting, attached decorations and opened-state editing.
-- [ ] Verify desktop/touch, undo, sugar, type changes, cutting and PNG export.
+- [x] Add quiet movement-driven sauce and pouring sounds with remembered mute and cleanup.
+- [x] Add stable potato hotdog with preserved decorations and soft transition.
+- [x] Add reversible longitudinal cutting, attached decorations and opened-state editing.
+- [x] Verify desktop/touch, undo, sugar, type changes, cutting and PNG export.
 
 - [x] Match illustrated tabletop, board and hotdog to the supplied reference.
 - [x] Add bottle-and-dollop sauce choices, left on PC and below the board on mobile.
