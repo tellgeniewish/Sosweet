@@ -34,18 +34,23 @@ export class FoodScene {
     const pixels = mask?.getImageData(0, 0, W, H).data;
     let seed = 91;
     const random = () => { seed = seed * 16807 % 2147483647; return seed / 2147483647; };
-    for (let row = 0; row < 9; row++) for (let col = 0; col < 27; col++) {
-      const x = DOG_RECT.x + 38 + col * 35 + (row % 2) * 17 + (random() - .5) * 15;
-      const y = DOG_RECT.y + 95 + row * 32 + (random() - .5) * 13;
-      if (x > BODY_END - 35 || (pixels?.[((y | 0) * W + (x | 0)) * 4 + 3] ?? 0) < 160) continue;
-      const size = 23 + random() * 13;
-      potato.save(); potato.translate(x, y); potato.rotate((random() - .5) * .7);
-      potato.fillStyle = pigments.shadow; potato.beginPath(); potato.roundRect(-size / 2 + 3, -size / 2 + 6, size, size, 5); potato.fill();
-      potato.fillStyle = pigments.side; potato.strokeStyle = pigments.edge; potato.lineWidth = 1.5;
-      potato.beginPath(); potato.moveTo(-size / 2, -size / 2); potato.lineTo(size / 2, -size / 2 + 3); potato.lineTo(size / 2 + 3, size / 2 + 5); potato.lineTo(-size / 2 + 3, size / 2 + 3); potato.closePath(); potato.fill(); potato.stroke();
-      potato.fillStyle = random() > .18 ? pigments.potato : pigments.side;
-      potato.beginPath(); potato.roundRect(-size / 2 - 2, -size / 2 - 5, size, size * .8, 4); potato.fill(); potato.stroke();
-      potato.strokeStyle = pigments.top; potato.lineWidth = 3; potato.beginPath(); potato.moveTo(-size / 2 + 3, -size / 2); potato.lineTo(size / 2 - 6, -size / 2 + 1); potato.stroke();
+    // A few large, simple potato cubes with generous gaps: the smooth hotdog
+    // silhouette stays dominant and the cubes only hint at the potato coating.
+    for (let row = 0; row < 2; row++) for (let col = 0; col < 9; col++) {
+      const x = DOG_RECT.x + 130 + col * 108 + (random() - .5) * 30;
+      const y = DOG_RECT.y + 130 + row * 128 + (random() - .5) * 26;
+      if (random() < .16) continue;
+      if (x > BODY_END - 60 || (pixels?.[((y | 0) * W + (x | 0)) * 4 + 3] ?? 0) < 160) continue;
+      const size = 58 + random() * 12;
+      potato.save(); potato.translate(x, y); potato.rotate((random() - .5) * .45);
+      potato.fillStyle = pigments.shadow; potato.beginPath(); potato.ellipse(4, size * .4, size * .52, size * .2, 0, 0, Math.PI * 2); potato.fill();
+      potato.strokeStyle = pigments.edge; potato.lineWidth = 2;
+      potato.fillStyle = pigments.side;
+      potato.beginPath(); potato.roundRect(-size / 2 + 4, -size / 2 + 9, size, size * .74, 9); potato.fill(); potato.stroke();
+      potato.fillStyle = random() > .15 ? pigments.potato : pigments.side;
+      potato.beginPath(); potato.roundRect(-size / 2, -size / 2, size, size * .74, 9); potato.fill(); potato.stroke();
+      potato.strokeStyle = pigments.top; potato.lineWidth = 4; potato.lineCap = 'round';
+      potato.beginPath(); potato.moveTo(-size / 2 + 9, -size / 2 + 8); potato.lineTo(size / 2 - 12, -size / 2 + 8); potato.stroke();
       potato.restore();
     }
     this.potatoMask.getContext('2d')?.drawImage(this.potato, 0, 0);
