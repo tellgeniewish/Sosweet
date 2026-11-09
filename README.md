@@ -1,26 +1,122 @@
-# Sosweet
+# 🌭 소스윗 (Sosweet)
 
-Implement exactly the screenshot and nothing else
+**💬 마음은 말로 하기 쑥스러우니까, 핫도그에 써볼까?**
 
-This project was built with [Lovable](https://lovable.dev).
+한국식 설탕 핫도그 위에 소스로 직접 글씨를 쓰는 인터랙티브 웹 앱입니다. 케첩·머스터드·마요네즈·스리라차·치즈·바비큐 중 하나를 골라 마우스나 손가락으로 핫도그 표면에 글씨와 그림을 그리고, 설탕을 뿌리고, 감자 핫도그로 바꾸거나 반으로 갈라 속살까지 꾸밀 수 있습니다. 완성한 핫도그는 PNG 이미지로 저장할 수 있습니다.
 
-**Live app**: https://sosweet.lovable.app
+**[🌐 소스윗 바로가기 - 소스로 쓰는 달콤한 한마디](https://sosweet.lovable.app)**
 
-## Build with Lovable
+## 📌 프로젝트 개요
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/f21e1064-6296-4c8d-9a73-43db76efb82d).
+| 항목 | 내용 |
+| --- | --- |
+| 프로젝트명 | 소스윗 (Sosweet) |
+| 서비스 유형 | 인터랙티브 캔버스 드로잉 웹 앱 |
+| 제작 목적 | 말하기 어려운 마음을 핫도그 위 소스 글씨로 전하는 재미있는 경험 제공 |
+| 주요 내용 | 소스 그리기, 설탕 뿌리기, 기본/감자 핫도그 전환, 반 가르기·다시 합치기, PNG 저장 |
+| 디자인 방향 | 따뜻한 손그림·수채화 느낌의 음식 일러스트, 크림색 배경과 원목 도마 |
+| 결과물 | TanStack Start 기반 반응형 웹 앱 (PC·모바일) |
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+## 🛠️ 기술 스택 및 개발 환경
 
-## Development
+| 구분 | 기술 | 활용 내용 |
+| --- | --- | --- |
+| 프레임워크 | React 19 · TanStack Start | 단일 페이지 앱 구조 및 라우팅 |
+| 언어 | TypeScript | 타입 안정성 확보 |
+| 빌드 | Vite 8 · Bun | 개발 서버 및 번들링 |
+| 스타일 | Tailwind CSS v4 | 반응형 레이아웃 및 커스텀 테마 |
+| 그래픽 | Canvas 2D API | 핫도그·도마·설탕 렌더링, 소스 드로잉 |
+| 소스 브러시 | 자체 브러시 엔진 | 거리장(distance field) 기반 도톰한 소스 질감과 윤기 표현 |
+| 사운드 | Web Audio API | 그리기·설탕 뿌리기 효과음 (음소거 기억) |
+| 테스트 | Vitest | 브러시·음식 상호작용 로직 테스트 |
+| 배포 | Lovable | 별도 설치 없이 웹사이트 공개 |
+| 버전 관리 | Git · GitHub | 소스코드 관리 및 이력 기록 |
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+모든 그리기 데이터는 논리 좌표계(1600×1050)로 저장되어 화면 크기가 바뀌어도 그림 위치가 밀리지 않습니다.
 
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+## 👥 담당자
+
+| 지니(김현진) |
+|:----------------:|
+| <img src="https://github.com/tellgeniewish.png" width="100"/><br/> |
+| [@tellgeniewish](https://github.com/tellgeniewish) |
+| 프로젝트 기획·디자인 디렉션·개발 (with Lovable) |
+
+## ✨ 주요 기능
+
+- **소스 드로잉:** 6종 소스(케첩·머스터드·마요네즈·스리라차·치즈·바비큐)를 골라 핫도그와 도마 위에 자유롭게 글씨·그림 그리기
+- **자연스러운 소스 질감:** 도톰한 볼륨, 짧은 윤기, 부드러운 그림자를 가진 소스 브러시. 같은 소스가 교차해도 깜빡임이나 어두운 얼룩 없이 표현
+- **설탕 뿌리기:** 설탕 통을 클릭할수록 핫도그가 하얘지며, 설탕은 빵 위에만 뿌려지고 막대·도마에는 닿지 않음
+- **감자 핫도그:** 기본 핫도그와 감자 핫도그를 부드러운 전환으로 교체. 그려둔 소스와 설탕은 그대로 유지
+- **반 가르기·다시 합치기:** 핫도그를 길게 반으로 갈라 빵과 소시지 속살을 노출. 장식은 각 절반에 붙어 함께 움직이고, 열린 상태에서도 편집 가능
+- **작은 효과음:** 소스를 그리거나 설탕을 뿌릴 때 조용한 소리. 음소거 설정은 다음 방문에도 기억
+- **실행 취소·다시하기:** 그리기·설탕·자르기를 한 단계씩 되돌리거나 전체 초기화
+- **완성하기 (PNG 저장):** 현재 음식 종류와 열림 상태를 그대로 반영한 이미지를 저장
+- **반응형 화면:** PC에서는 소스 선택이 도마 왼쪽, 모바일에서는 도마 아래에 배치
+
+## 📁 프로젝트 폴더 구조
+
+```text
+Sosweet/
+├── src/
+│   ├── routes/
+│   │   ├── __root.tsx              # 루트 레이아웃 및 메타데이터
+│   │   └── index.tsx               # 메인 화면 (캔버스, 소스 선택, 도구 버튼)
+│   ├── lib/
+│   │   ├── hotdog-canvas.ts        # 논리 좌표계, 일러스트 에셋, 설탕 렌더링
+│   │   ├── sauce-brush.ts          # 소스 브러시 엔진 (질감·윤기·교차 처리)
+│   │   ├── food-scene.ts           # 장면 렌더러 (전환, 히트 테스트, PNG 출력)
+│   │   ├── food-geometry.ts        # 반 가르기 기하 계산 (절반 변환, 좌표 매핑)
+│   │   └── food-sound.ts           # 효과음 (취소 가능한 제스처 엔벌로프)
+│   ├── assets/                     # 도마·핫도그·설탕 통·소스 병 일러스트
+│   ├── test/                       # Vitest 테스트
+│   └── styles.css                  # 테마 토큰 및 커스텀 스타일
+├── public/                         # 파비콘 등 정적 파일
+└── README.md
 ```
+
+## 🚀 이용 및 실행 방법
+
+별도의 프로그램 설치 없이 아래 링크로 접속하면 바로 이용할 수 있습니다.
+
+**🌐 [소스윗 바로가기](https://sosweet.lovable.app)**
+
+소스를 고른 뒤 핫도그 위를 마우스나 손가락으로 드래그하면 글씨를 쓸 수 있습니다. 설탕 통을 눌러 설탕을 뿌리고, 완성하기 버튼으로 PNG 이미지를 저장해 보세요.
+
+<details>
+<summary><strong>개발자용 로컬 실행 방법</strong></summary>
+
+저장소를 복제한 뒤 의존성을 설치하고 개발 서버를 실행합니다.
+
+```bash
+git clone https://github.com/tellgeniewish/Sosweet.git
+cd Sosweet
+bun install
+bun run dev
+```
+
+브라우저에서 `http://localhost:8080`으로 접속합니다. 테스트는 `bun run test`로 실행할 수 있습니다.
+
+</details>
+
+## 📖 라이선스 및 이용 안내
+
+현재 별도의 오픈소스 라이선스가 부여되지 않았습니다. 코드·일러스트 에셋의 이용·재배포를 원하시면 저장소 소유자에게 문의해 주세요.
+
+## 🔄 수정 이력
+
+주요 업데이트 내용은 GitHub 저장소의 [커밋 기록](https://github.com/tellgeniewish/Sosweet/commits/)에서 확인할 수 있습니다.
+
+## 📝 Git 커밋 컨벤션
+
+| 접두어 | 용도 |
+| --- | --- |
+| `[Feat]` | 새로운 기능 추가 |
+| `[Fix]` | 오류 수정 |
+| `[Style]` | 디자인·스타일 변경 |
+| `[Refactor]` | 기능 변경 없는 코드 구조 개선 |
+| `[Docs]` | README 등 문서 수정 |
+
+---
+
+> 말로 하기 쑥스러운 마음, **핫도그 위 소스 글씨로 전하는 달콤한 한마디.**
